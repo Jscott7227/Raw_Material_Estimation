@@ -1,13 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hackathon Frontend</title>
-  </head>
-  <body>
-    <main>
-      <h1>Hackathon frontend is running.</h1>
-    </main>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portobello America - Raw Materials Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="hero">
+        <h1>Raw Materials Dashboard</h1>
+        <div class="subtitle">Portobello America - Innovative Tile Solutions</div>
+    </div>
+    
+    <div class="tabs">
+        <div class="tab active" onclick="showTab(0)">Raw Weight</div>
+        <div class="tab" onclick="showTab(1)">Truck Data</div>
+    </div>
+    
+    <div class="content active">
+        <div class="cards-grid">
+            <div class="card">
+                <div class="card-header green">Material A</div>
+                <div class="card-number">950 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header yellow">Material B</div>
+                <div class="card-number">450 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header red">Material C</div>
+                <div class="card-number">180 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header green">Material D</div>
+                <div class="card-number">1100 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header yellow">Material E</div>
+                <div class="card-number">520 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header red">Material F</div>
+                <div class="card-number">240 tons</div>
+            </div>
+        </div>
+    </div>
+    <div class="content">
+        <input type="text" id="truckSearch" placeholder="Search by truck number..." onkeyup="searchTruck()">
+        <table class="truck-table" id="truckTable">
+            <thead>
+                <tr>
+                    <th>Delivery Number</th>
+                    <th>Incoming Weight</th>
+                    <th>Material Weight</th>
+                    <th>Delivery Time & Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>TRK-001</td>
+                    <td>45.2 tons</td>
+                    <td>42.8 tons</td>
+                    <td>2024-01-15 14:30</td>
+                </tr>
+                <tr>
+                    <td>SHP-2024-0156</td>
+                    <td>38.7 tons</td>
+                    <td>36.1 tons</td>
+                    <td>2024-01-15 16:45</td>
+                </tr>
+                <tr>
+                    <td>TRK-003</td>
+                    <td>52.1 tons</td>
+                    <td>49.3 tons</td>
+                    <td>2024-01-16 09:15</td>
+                </tr>
+                <tr>
+                    <td>SHP-2024-0157</td>
+                    <td>41.5 tons</td>
+                    <td>39.2 tons</td>
+                    <td>2024-01-16 11:20</td>
+                </tr>
+                <tr>
+                    <td>TRK-005</td>
+                    <td>47.8 tons</td>
+                    <td>44.9 tons</td>
+                    <td>2024-01-16 13:50</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        function showTab(index) {
+            document.querySelectorAll('.tab').forEach((tab, i) => {
+                tab.classList.toggle('active', i === index);
+            });
+            document.querySelectorAll('.content').forEach((content, i) => {
+                content.classList.toggle('active', i === index);
+            });
+        }
+        
+        function searchTruck() {
+            const input = document.getElementById('truckSearch').value.toLowerCase();
+            const table = document.getElementById('truckTable');
+            const rows = table.getElementsByTagName('tr');
+            
+            for (let i = 1; i < rows.length; i++) {
+                const truckNumber = rows[i].getElementsByTagName('td')[0].textContent.toLowerCase();
+                rows[i].style.display = truckNumber.includes(input) ? '' : 'none';
+            }
+        }
+    </script>
+</body>
 </html>
