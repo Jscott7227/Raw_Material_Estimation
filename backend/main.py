@@ -6,7 +6,14 @@ async def lifespan(app: FastAPI):
     init_db()  # Create tables and preload materials
     yield
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Raw Materials API",
+    description="API for Portobello America's raw materials dashboard.",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
