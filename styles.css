@@ -1,46 +1,178 @@
-body { font-family: 'Arial', sans-serif; margin: 0; background: #f8f9fa; }
+body { 
+    font-family: 'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+    margin: 0; 
+    background: rgba(79, 81, 89, 0.1); 
+    font-weight: 300;
+}
+
 .hero { 
-    background: linear-gradient(135deg, #8B4513 0%, #A0522D 100%); 
+    background: linear-gradient(135deg, #4F5159 0%, #636870 100%); 
     color: white; 
     padding: 50px 20px; 
     text-align: center; 
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
-.hero h1 { margin: 0; font-size: 2.8em; font-weight: 300; letter-spacing: 2px; }
-.hero .subtitle { margin-top: 10px; font-size: 1.1em; opacity: 0.9; }
+
+.hero h1 { 
+    margin: 0; 
+    font-size: 2.8em; 
+    font-weight: 300; /* Roboto Light */
+    letter-spacing: 2px; 
+}
+
+.hero .subtitle { 
+    margin-top: 10px; 
+    font-size: 1.1em; 
+    opacity: 0.9; 
+    font-weight: 100; /* Roboto Thin */
+}
+
 .tabs { 
     display: flex; 
-    background: white;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     margin: 20px 20px 0 20px;
-    border-radius: 8px 8px 0 0;
+    position: relative;
+    z-index: 10;
 }
+
 .tab { 
     padding: 15px 25px; 
     cursor: pointer; 
     background: #e9ecef;
-    border-right: 1px solid #dee2e6;
+    border: 1px solid #dee2e6;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    margin-right: 2px;
     transition: all 0.3s ease;
-    font-weight: 500;
+    font-weight: 400;
+    position: relative;
 }
-.tab:first-child { border-radius: 8px 0 0 0; }
-.tab:last-child { border-right: none; border-radius: 0 8px 0 0; }
-.tab:hover { background: #A0522D; color: white; }
-.tab.active { background: #8B4513; color: white; }
+
+.tab:last-child { margin-right: 0; }
+
+.tab:hover { 
+    background: rgba(79, 81, 89, 0.2); /* 20% Portobello Gray */
+    color: #4F5159; 
+}
+
+.tab.active { 
+    background: white;
+    color: #4F5159;
+    border-color: #dee2e6;
+    z-index: 11;
+}
+
 .content { 
     display: none; 
     padding: 30px; 
     background: white;
-    margin: 0 20px;
-    border-radius: 0 0 8px 8px;
+    margin: -1px 20px 0 20px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     min-height: 300px;
+    position: relative;
+    z-index: 5;
 }
+
 .content.active { display: block; }
-.cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.card { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
-.card-header { padding: 15px; color: white; font-weight: 600; text-align: center; }
-.card-header.green { background: #28a745; }
-.card-header.yellow { background: #ffc107; color: #333; }
-.card-header.red { background: #dc3545; }
-.card-number { padding: 30px; text-align: center; font-size: 2.5em; font-weight: bold; color: #333; }
+
+.cards-grid { 
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 20px; 
+}
+
+.card { 
+    background: white; 
+    border-radius: 8px; 
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12); 
+    overflow: hidden; 
+}
+
+.card-header { 
+    padding: 15px; 
+    color: white; 
+    font-weight: 700; /* Roboto Bold */
+    text-align: center; 
+}
+
+.card-header.green { 
+    background: #6B8E23; /* Olive green - earthy */
+    color: white;
+}
+
+.card-header.yellow { 
+    background: #E8B75D; /* Brighter warm sand/golden tan - earthy */
+    color: #4F5159; 
+}
+
+.card-header.red { 
+    background: #C0653F; /* Brighter terracotta/clay - earthy */
+    color: white;
+}
+
+.card-number { 
+    padding: 30px; 
+    text-align: center; 
+    font-size: 2.5em; 
+    font-weight: 300; 
+    color: #4F5159; 
+}
+
+.truck-table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    background: white; 
+    border-radius: 8px; 
+    overflow: hidden; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+}
+
+.truck-table th { 
+    background: #4F5159; /* 100% Portobello Gray */
+    color: white; 
+    padding: 15px; 
+    text-align: left; 
+    font-weight: 700; /* Roboto Bold */
+}
+
+.truck-table td { 
+    padding: 12px 15px; 
+    border-bottom: 1px solid #dee2e6; 
+    color: #4F5159;
+}
+
+.truck-table tr:hover { 
+    background: rgba(79, 81, 89, 0.05); /* 5% Portobello Gray tint */
+}
+
+#truckSearch { 
+    width: 25%; 
+    padding: 12px; 
+    margin-bottom: 15px; 
+    border: 2px solid rgba(79, 81, 89, 0.3); /* 30% Portobello Gray */
+    border-radius: 8px; 
+    font-size: 16px; 
+    font-family: 'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-weight: 300; /* Roboto Light */
+}
+
+#truckSearch:focus { 
+    outline: none; 
+    border-color: #4F5159; /* Full Portobello Gray */
+}
+
+#truckSearch::placeholder {
+    color: rgba(79, 81, 89, 0.5); /* 50% Portobello Gray */
+}
+
+/* Additional brand-compliant styling */
+@media (max-width: 768px) {
+    .cards-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    #truckSearch {
+        width: 100%;
+    }
+}
