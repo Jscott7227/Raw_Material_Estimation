@@ -171,7 +171,7 @@ body {
     color: rgba(79, 81, 89, 0.5);
 }
 .date-filter-container { position: relative; }
-#dateRange { padding: 12px; border: 2px solid rgba(79, 81, 89, 0.3); border-radius: 8px; font-family: 'Roboto', sans-serif; width: auto; min-width: 140px; max-width: 280px; cursor: pointer; background: white; font-size: 16px; box-sizing: border-box; }
+#dateRange { padding: 12px; border: 2px solid rgba(79, 81, 89, 0.3); border-radius: 8px; font-family: 'Roboto', sans-serif; width: auto; min-width: 100px; max-width: 280px; cursor: pointer; background: white; font-size: 16px; box-sizing: border-box; }
 #dateRange:focus { outline: none; border-color: #4F5159; }
 .date-picker-popup { position: absolute; top: 100%; left: 0; background: white; border: 2px solid #4F5159; border-radius: 8px; padding: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; }
 .date-picker-header { display: flex; gap: 8px; margin-bottom: 10px; }
