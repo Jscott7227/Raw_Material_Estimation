@@ -32,7 +32,7 @@ def init_test_delivery():
     test_delivery = TruckDelivery(
         delivery_num="TRK-TEST-001",
         incoming_weight=1000,
-        material_weights={3: 500, 4: 500},  # material IDs with weights
+        material_id = 1,
         delivery_time=datetime.utcnow(),
         status="pending"
     )
