@@ -1,8 +1,10 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from database import init_db
 from datetime import datetime
 
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()  # Create tables and preload materials
     yield
