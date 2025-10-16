@@ -1,0 +1,46 @@
+body { font-family: 'Arial', sans-serif; margin: 0; background: #f8f9fa; }
+.hero { 
+    background: linear-gradient(135deg, #8B4513 0%, #A0522D 100%); 
+    color: white; 
+    padding: 50px 20px; 
+    text-align: center; 
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+.hero h1 { margin: 0; font-size: 2.8em; font-weight: 300; letter-spacing: 2px; }
+.hero .subtitle { margin-top: 10px; font-size: 1.1em; opacity: 0.9; }
+.tabs { 
+    display: flex; 
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin: 20px 20px 0 20px;
+    border-radius: 8px 8px 0 0;
+}
+.tab { 
+    padding: 15px 25px; 
+    cursor: pointer; 
+    background: #e9ecef;
+    border-right: 1px solid #dee2e6;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+.tab:first-child { border-radius: 8px 0 0 0; }
+.tab:last-child { border-right: none; border-radius: 0 8px 0 0; }
+.tab:hover { background: #A0522D; color: white; }
+.tab.active { background: #8B4513; color: white; }
+.content { 
+    display: none; 
+    padding: 30px; 
+    background: white;
+    margin: 0 20px;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    min-height: 300px;
+}
+.content.active { display: block; }
+.cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.card { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
+.card-header { padding: 15px; color: white; font-weight: 600; text-align: center; }
+.card-header.green { background: #28a745; }
+.card-header.yellow { background: #ffc107; color: #333; }
+.card-header.red { background: #dc3545; }
+.card-number { padding: 30px; text-align: center; font-size: 2.5em; font-weight: bold; color: #333; }
