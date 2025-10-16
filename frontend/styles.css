@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400;500;700&display=swap');
+
 body { 
-    font-family: 'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+    font-family: 'Roboto', sans-serif; 
     margin: 0; 
     background: rgba(79, 81, 89, 0.1); 
     font-weight: 300;
@@ -145,26 +147,45 @@ body {
 .truck-table tr:hover { 
     background: rgba(79, 81, 89, 0.05); /* 5% Portobello Gray tint */
 }
-
+.truck-table tr.completed { background: rgba(107, 142, 35, 0.05); }
+.truck-table tr.upcoming { background: rgba(232, 183, 93, 0.05); }
+.status-completed { background: #6B8E23; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.status-upcoming { background: #E8B75D; color: #4F5159; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.filter-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.left-controls { display: flex; gap: 15px; align-items: flex-start; }
 #truckSearch { 
-    width: 25%; 
+    width: 225px; 
+    flex-shrink: 0;
     padding: 12px; 
-    margin-bottom: 15px; 
-    border: 2px solid rgba(79, 81, 89, 0.3); /* 30% Portobello Gray */
+    border: 2px solid rgba(79, 81, 89, 0.3);
     border-radius: 8px; 
     font-size: 16px; 
-    font-family: 'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-weight: 300; /* Roboto Light */
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
-
 #truckSearch:focus { 
     outline: none; 
-    border-color: #4F5159; /* Full Portobello Gray */
+    border-color: #4F5159;
 }
-
 #truckSearch::placeholder {
-    color: rgba(79, 81, 89, 0.5); /* 50% Portobello Gray */
+    color: rgba(79, 81, 89, 0.5);
 }
+.date-filter-container { position: relative; }
+#dateRange { padding: 12px; border: 2px solid rgba(79, 81, 89, 0.3); border-radius: 8px; font-family: 'Roboto', sans-serif; width: auto; min-width: 140px; max-width: 280px; cursor: pointer; background: white; font-size: 16px; box-sizing: border-box; }
+#dateRange:focus { outline: none; border-color: #4F5159; }
+.date-picker-popup { position: absolute; top: 100%; left: 0; background: white; border: 2px solid #4F5159; border-radius: 8px; padding: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; }
+.date-picker-header { display: flex; gap: 8px; margin-bottom: 10px; }
+.date-picker-header button { padding: 6px 12px; border: 1px solid #4F5159; background: white; color: #4F5159; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: 'Roboto', sans-serif; }
+.date-picker-header button:hover { background: #4F5159; color: white; }
+.date-picker-popup input[type="date"] { padding: 8px 12px; border: 1px solid #dee2e6; border-radius: 4px; margin: 5px; font-family: 'Roboto', sans-serif; }
+.status-filters { display: flex; gap: 10px; }
+.filter-btn { padding: 8px 16px; border: 1px solid #4F5159; background: white; color: #4F5159; border-radius: 4px; cursor: pointer; font-weight: 500; font-family: 'Roboto', sans-serif; }
+.filter-btn:hover { background: rgba(79, 81, 89, 0.1); }
+.filter-btn.active { background: #4F5159; color: white; }
+.status-clickable { cursor: pointer; transition: opacity 0.2s; }
+.status-clickable:hover { opacity: 0.8; }
+
+
 
 /* Additional brand-compliant styling */
 @media (max-width: 768px) {
