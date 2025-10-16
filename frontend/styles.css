@@ -91,6 +91,13 @@ body {
 
 .card-header { 
     padding: 15px; 
+    color: #4F5159; 
+    font-weight: 700; /* Roboto Bold */
+    text-align: center; 
+}
+
+.card-header { 
+    padding: 15px; 
     color: white; 
     font-weight: 700; /* Roboto Bold */
     text-align: center; 
@@ -176,23 +183,31 @@ body {
         width: 100%;
     }
 }
+
 .button { 
-    padding: 5px; 
+    padding: 7px; 
     text-align: center; 
     font-size: 1em; 
     font-weight: 500; 
-    color: #333;
     border-radius: 8px;
-    background: white;
+    border-width: 0px;
+    background: rgba(79, 81, 89, 0.2);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12); 
 }
+
 .button-row {
     padding: 15px;
-    align-items: end;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px
 }
+
 .material-icons { 
     font-size: 24px; 
     vertical-align: middle; }
+
 .material-icons.md-36 { font-size: 36px; }
+
 .visually-hidden { 
     position: absolute !important; 
     width: 1px; 
@@ -203,6 +218,7 @@ body {
     clip: rect(0 0 0 0); 
     border: 0; 
 }
+
 .warning{ 
     background: rgb(249, 240, 157); 
     padding: 15px;
@@ -218,6 +234,7 @@ body {
     align-items: center;
 
 }
+
 .warning-header { 
     padding: 5px; 
     color: rgb(216, 177, 36); 
@@ -225,6 +242,7 @@ body {
     font-size: 1.5em; 
     text-align:start
 }
+
 .warning-body { 
     padding: 5px; 
     text-align: start; 
@@ -232,6 +250,16 @@ body {
     font-weight: 300; 
     color: rgb(147, 117, 11);  
 }
+
+/* .circle-icon {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+}
+.circle-icon.green{
+  color: #6B8E23;
+} */
+
 .exclamation-icon {
   position: relative;
   width: 40px;
