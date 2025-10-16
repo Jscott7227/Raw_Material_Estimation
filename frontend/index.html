@@ -61,71 +61,44 @@
         </div>
     </div>
     <div class="content">
-        <input type="text" id="truckSearch" placeholder="Search by truck number..." onkeyup="searchTruck()">
+        <div class="filter-controls">
+            <div class="left-controls">
+                <input type="text" id="truckSearch" placeholder="Search by truck number..." onkeyup="searchTruck()">
+                <div class="date-filter-container">
+                    <input type="text" id="dateRange" placeholder="Select date or range..." readonly onclick="showDatePicker()">
+                    <div id="datePicker" class="date-picker-popup" style="display: none;">
+                        <div class="date-picker-header">
+                            <button type="button" onclick="setToday()">Today</button>
+                            <button type="button" onclick="setWeek()">This Week</button>
+                            <button type="button" onclick="clearRange()">Clear</button>
+                        </div>
+                        <input type="date" id="startDate" onchange="onStartDateChange()">
+                        <input type="date" id="endDate" onchange="onEndDateChange()">
+                    </div>
+                </div>
+            </div>
+            <div class="status-filters">
+                <button class="filter-btn active" onclick="filterStatus('all')">All</button>
+                <button class="filter-btn" onclick="filterStatus('completed')">Completed</button>
+                <button class="filter-btn" onclick="filterStatus('upcoming')">Upcoming</button>
+            </div>
+        </div>
         <table class="truck-table" id="truckTable">
             <thead>
                 <tr>
                     <th>Delivery Number</th>
+                    <th>Material</th>
                     <th>Incoming Weight</th>
                     <th>Material Weight</th>
                     <th>Delivery Time & Date</th>
+                    <th>Status</th>
                 </tr>
             </thead>
-            <tbody>
-                <tr>
-                    <td>TRK-001</td>
-                    <td>45.2 tons</td>
-                    <td>42.8 tons</td>
-                    <td>2024-01-15 14:30</td>
-                </tr>
-                <tr>
-                    <td>SHP-2024-0156</td>
-                    <td>38.7 tons</td>
-                    <td>36.1 tons</td>
-                    <td>2024-01-15 16:45</td>
-                </tr>
-                <tr>
-                    <td>TRK-003</td>
-                    <td>52.1 tons</td>
-                    <td>49.3 tons</td>
-                    <td>2024-01-16 09:15</td>
-                </tr>
-                <tr>
-                    <td>SHP-2024-0157</td>
-                    <td>41.5 tons</td>
-                    <td>39.2 tons</td>
-                    <td>2024-01-16 11:20</td>
-                </tr>
-                <tr>
-                    <td>TRK-005</td>
-                    <td>47.8 tons</td>
-                    <td>44.9 tons</td>
-                    <td>2024-01-16 13:50</td>
-                </tr>
+            <tbody id="truckTableBody">
             </tbody>
         </table>
     </div>
     
-    <script>
-        function showTab(index) {
-            document.querySelectorAll('.tab').forEach((tab, i) => {
-                tab.classList.toggle('active', i === index);
-            });
-            document.querySelectorAll('.content').forEach((content, i) => {
-                content.classList.toggle('active', i === index);
-            });
-        }
-        
-        function searchTruck() {
-            const input = document.getElementById('truckSearch').value.toLowerCase();
-            const table = document.getElementById('truckTable');
-            const rows = table.getElementsByTagName('tr');
-            
-            for (let i = 1; i < rows.length; i++) {
-                const truckNumber = rows[i].getElementsByTagName('td')[0].textContent.toLowerCase();
-                rows[i].style.display = truckNumber.includes(input) ? '' : 'none';
-            }
-        }
-    </script>
+    <script src="app.js"></script>
 </body>
 </html>

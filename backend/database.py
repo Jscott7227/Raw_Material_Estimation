@@ -2,6 +2,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from material import Base, Material
+from truck_delivery import TruckDelivery
+from datetime import datetime
 
 DATABASE_URL = "sqlite:///./materials.db"
 
@@ -15,6 +17,29 @@ def init_db():
     """Create tables if they do not exist"""
     Base.metadata.create_all(bind=engine)
     init_materials()  # Preload materials
+    init_test_delivery()
+    
+def init_test_delivery():
+    """Add a temporary test truck delivery if none exists"""
+    db = SessionLocal()
+    
+    # Check if any deliveries already exist
+    if db.query(TruckDelivery).count() > 0:
+        db.close()
+        return
+
+    # Example test delivery
+    test_delivery = TruckDelivery(
+        delivery_num="TRK-TEST-001",
+        incoming_weight=1000,
+        material_weights={3: 500, 4: 500},  # material IDs with weights
+        delivery_time=datetime.utcnow(),
+        status="pending"
+    )
+
+    db.add(test_delivery)
+    db.commit()
+    db.close()
 
 def init_materials():
     """Initialize DB with 6 default materials with 0 weight and humidity"""
