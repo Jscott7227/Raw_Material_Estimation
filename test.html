@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portobello America - Raw Materials Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="hero">
+        <h1>Raw Materials Dashboard</h1>
+        <div class="subtitle">Portobello America - Innovative Tile Solutions</div>
+    </div>
+    
+    <div class="tabs">
+        <div class="tab active" onclick="showTab(0)">Raw Weight</div>
+        <div class="tab" onclick="showTab(1)">Truck Data</div>
+    </div>
+    
+    <div class="content active">
+        <div class="cards-grid">
+            <div class="card">
+                <div class="card-header green">Material A</div>
+                <div class="card-number">950 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header yellow">Material B</div>
+                <div class="card-number">450 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header red">Material C</div>
+                <div class="card-number">180 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header green">Material D</div>
+                <div class="card-number">1100 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header yellow">Material E</div>
+                <div class="card-number">520 tons</div>
+            </div>
+            <div class="card">
+                <div class="card-header red">Material F</div>
+                <div class="card-number">240 tons</div>
+            </div>
+        </div>
+    </div>
+    <div class="content">Content for Tab 2</div>
+    
+    <script>
+        function showTab(index) {
+            document.querySelectorAll('.tab').forEach((tab, i) => {
+                tab.classList.toggle('active', i === index);
+            });
+            document.querySelectorAll('.content').forEach((content, i) => {
+                content.classList.toggle('active', i === index);
+            });
+        }
+    </script>
+</body>
+</html>
