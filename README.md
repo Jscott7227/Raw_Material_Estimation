@@ -27,6 +27,11 @@ docker compose up --build
 - `docker-compose.yml` – Orchestrates backend and frontend for local development.
 - `.devcontainer/` – VS Code Dev Container configuration tied to the backend service.
 
+## Frontend Development
+- Edit `frontend/index.html` to customize the current static page.
+- Add any supporting assets (JS/CSS/images) in `frontend/` and update the Nginx `COPY` instructions in `frontend/Dockerfile` if new files are needed.
+- Rebuild the frontend container when Docker is available: `docker compose up --build frontend`.
+
 ## Troubleshooting
 - Rebuild the container if dependencies change: `Dev Containers: Rebuild Container`.
 - Ensure Docker Desktop has enough memory (4 GB+ recommended) and that ports `8000` and `8080` are free.
