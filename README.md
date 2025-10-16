@@ -1,23 +1,33 @@
-# Hackathon Dev Container Setup
+# Hackathon Monorepo
 
-This project ships with a VS Code Dev Container so contributors can share a consistent development environment. Follow the steps below to get it running locally.
+Unified workspace for the hackathon project. The repository ships with a Docker-based development workflow that spins up a Python FastAPI backend and a static frontend.
 
 ## Prerequisites
-- Docker Desktop (macOS/Windows) or Docker Engine (Linux) running and up to date.
-- VS Code with the Dev Containers extension (`ms-vscode-remote.remote-containers`).
-- Git to clone this repository.
+- Docker Desktop (macOS/Windows) or Docker Engine (Linux)
+- VS Code with the Dev Containers extension (`ms-vscode-remote.remote-containers`)
+- Git
 
-## Quick Start
-1. Clone this repository and open the folder in VS Code.
-2. When prompted, or via the Command Palette (`⇧⌘P` / `Ctrl+Shift+P`), choose `Dev Containers: Reopen in Container`.
-3. Wait for the container build to finish. The build uses `.devcontainer/devcontainer.json`, which points at `docker-compose.yml` and launches the `backend` service with `/app` mounted as the workspace.
-4. After the container starts, VS Code runs the configured post-create commands:
-   - `pip install -r requirements.txt`
-   - `bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh)"` (installs Oh My Bash for a nicer shell experience)
-5. Once the commands complete, the environment is ready to use. You can run, test, and debug the app directly inside the container.
+## Quick Start (VS Code Dev Container)
+1. Clone the repository and open it in VS Code.
+2. When prompted, select `Dev Containers: Reopen in Container` (or run it from the Command Palette).
+3. The container build uses `docker-compose.yml` to start the `backend` service and mounts the workspace at `/app`.
+4. After the container starts, the post-create command runs `pip install -r requirements.txt` to ensure dependencies are installed.
+5. The backend is started with Uvicorn in reload mode; exposed port `8000` is forwarded automatically.
 
-## Tips
-- Use the Dev Containers status bar menu in VS Code to rebuild the container if you change dependencies or the Docker setup.
-- If the post-create commands fail, reopen the Command Palette and run `Dev Containers: Rebuild Container` to retry.
-- The dev container installs recommended VS Code extensions automatically; you can add more under `customizations` in `.devcontainer/devcontainer.json`.
+## Running Locally with Docker Compose
+```bash
+docker compose up --build
+```
+- Backend available at `http://localhost:8000`
+- Frontend served from Nginx at `http://localhost:8080`
 
+## Repo Layout
+- `backend/` – FastAPI application, Dockerfile, and Python dependencies.
+- `frontend/` – Static site compiled into an Nginx container.
+- `docker-compose.yml` – Orchestrates backend and frontend for local development.
+- `.devcontainer/` – VS Code Dev Container configuration tied to the backend service.
+
+## Troubleshooting
+- Rebuild the container if dependencies change: `Dev Containers: Rebuild Container`.
+- Ensure Docker Desktop has enough memory (4 GB+ recommended) and that ports `8000` and `8080` are free.
+- If the backend dependencies appear missing, run `pip install -r requirements.txt` inside the dev container terminal.
