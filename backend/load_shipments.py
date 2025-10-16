@@ -15,7 +15,7 @@ import math
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, Optional, Sequence
 
 from sqlalchemy import func
 
@@ -60,9 +60,10 @@ def get_or_create_material(session, name: str) -> Material:
 
 
 def parse_delivery_datetime(raw: str) -> str:
-    """Convert shipment datetime strings into ISO-8601 for persistence."""
-    dt = datetime.strptime(raw, "%Y-%m-%d %H:%M")
-    return dt.isoformat()
+    """Validate and return shipment datetime strings for persistence."""
+    # The DB schema stores this as a string, so we'll just validate it.
+    datetime.strptime(raw, "%Y-%m-%d %H:%M")
+    return raw
 
 
 def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
@@ -73,7 +74,7 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
     try:
         if reset:
             session.query(TruckDelivery).delete()
-            session.query(Material).update({Material.weight: 0.0})
+            session.query(Material).update({"weight": 0.0})
             session.commit()
 
         imported = 0
@@ -90,17 +91,17 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
 
             material = get_or_create_material(session, material_name)
 
-            existing = (
+            existing: Optional[TruckDelivery] = (
                 session.query(TruckDelivery)
                 .filter(TruckDelivery.delivery_num == delivery_number)
                 .one_or_none()
             )
 
             if existing:
-                existing.material_id = material.id
-                existing.incoming_weight = incoming_weight
-                existing.delivery_time = delivery_time
-                existing.status = status
+                setattr(existing, "material_id", material.id)
+                setattr(existing, "incoming_weight", incoming_weight)
+                setattr(existing, "delivery_time", delivery_time)
+                setattr(existing, "status", status)
                 updated += 1
             else:
                 shipment = TruckDelivery(
@@ -138,7 +139,7 @@ def load_json_records(path: Path) -> Iterable[dict]:
         return json.load(handle)
 
 
-def parse_cli_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
+def parse_cli_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Load shipment JSON data into the SQLite database."
     )
@@ -157,7 +158,7 @@ def parse_cli_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[Iterable[str]] = None) -> None:
+def main(argv: Optional[Sequence[str]] = None) -> None:
     args = parse_cli_args(argv)
     records = load_json_records(args.file)
     load_shipments(records, reset=args.reset)

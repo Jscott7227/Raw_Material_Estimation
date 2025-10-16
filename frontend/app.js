@@ -8,24 +8,81 @@ function showTab(index) {
 }
 
 let shipmentsData = [];
+let defaultShipmentDateBounds = { min: null, max: null };
 
 function getCurrentDate() {
     const today = new Date();
     return today.toISOString().split('T')[0];
 }
 
-async function loadShipments() {
-    const response = await fetch('../backend/data/shipments.json');
-    shipmentsData = await response.json();
-    
-    // Set default dates to today
-    const today = getCurrentDate();
-    document.getElementById('startDate').value = today;
-    document.getElementById('endDate').value = today;
-    document.getElementById('dateRange').value = today;
-    
+function setDateInputs(start, end) {
+    const startInput = document.getElementById('startDate');
+    const endInput = document.getElementById('endDate');
+    const rangeInput = document.getElementById('dateRange');
+
+    startInput.value = start;
+    endInput.value = end;
+
+    if (start === end) {
+        rangeInput.value = start;
+    } else {
+        rangeInput.value = `${start} to ${end}`;
+    }
+
     resizeDateInput();
-    renderShipments();
+}
+
+async function loadShipments() {
+    try {
+        const [deliveriesResponse, materialsResponse] = await Promise.all([
+            fetch('http://localhost:8000/api/deliveries'),
+            fetch('http://localhost:8000/api/materials')
+        ]);
+
+        if (!deliveriesResponse.ok) {
+            throw new Error(`Failed to load deliveries: ${deliveriesResponse.status}`);
+        }
+
+        const deliveries = await deliveriesResponse.json();
+        const materials = materialsResponse.ok ? await materialsResponse.json() : [];
+        const materialMap = new Map(materials.map(material => [material.id, material.type]));
+
+        shipmentsData = deliveries.map(delivery => {
+            const deliveryDateTime = (delivery.delivery_time || '').replace('T', ' ');
+            return {
+                deliveryNumber: delivery.delivery_num,
+                material: materialMap.get(delivery.material_id) || `Material ${delivery.material_id}`,
+                incomingWeight: Number(delivery.incoming_weight) || 0,
+                materialWeight: Number(delivery.material_weight ?? delivery.incoming_weight) || 0,
+                deliveryDateTime,
+                status: delivery.status || 'pending'
+            };
+        });
+
+        if (shipmentsData.length > 0) {
+            const shipmentDates = shipmentsData
+                .map(shipment => shipment.deliveryDateTime.split(' ')[0])
+                .filter(Boolean)
+                .sort();
+
+            defaultShipmentDateBounds.min = shipmentDates[0];
+            defaultShipmentDateBounds.max = shipmentDates[shipmentDates.length - 1];
+            setDateInputs(defaultShipmentDateBounds.min, defaultShipmentDateBounds.max);
+        } else {
+            const today = getCurrentDate();
+            defaultShipmentDateBounds = { min: today, max: today };
+            setDateInputs(today, today);
+        }
+
+        renderShipments();
+    } catch (error) {
+        console.error('Failed to load shipments:', error);
+        shipmentsData = [];
+        const today = getCurrentDate();
+        defaultShipmentDateBounds = { min: today, max: today };
+        setDateInputs(today, today);
+        renderShipments();
+    }
 }
 
 function renderShipments() {
@@ -127,9 +184,8 @@ document.addEventListener('click', function(event) {
 
 function setToday() {
     const today = getCurrentDate();
-    document.getElementById('startDate').value = today;
-    document.getElementById('endDate').value = today;
-    updateDateRange();
+    setDateInputs(today, today);
+    renderShipments();
 }
 
 function setWeek() {
@@ -138,15 +194,21 @@ function setWeek() {
     const endOfWeek = new Date(today);
     endOfWeek.setDate(today.getDate() + 6);
     
-    document.getElementById('startDate').value = startOfWeek.toISOString().split('T')[0];
-    document.getElementById('endDate').value = endOfWeek.toISOString().split('T')[0];
-    updateDateRange();
+    const start = startOfWeek.toISOString().split('T')[0];
+    const end = endOfWeek.toISOString().split('T')[0];
+    setDateInputs(start, end);
+    renderShipments();
 }
 
 function clearRange() {
-    document.getElementById('dateRange').value = '';
-    resizeDateInput();
+    if (defaultShipmentDateBounds.min && defaultShipmentDateBounds.max) {
+        setDateInputs(defaultShipmentDateBounds.min, defaultShipmentDateBounds.max);
+    } else {
+        const today = getCurrentDate();
+        setDateInputs(today, today);
+    }
     document.getElementById('datePicker').style.display = 'none';
+    renderShipments();
 }
 
 function searchTruck() {
