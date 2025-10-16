@@ -176,3 +176,76 @@ body {
         width: 100%;
     }
 }
+.button { 
+    padding: 5px; 
+    text-align: center; 
+    font-size: 1em; 
+    font-weight: 500; 
+    color: #333;
+    border-radius: 8px;
+    background: white;
+}
+.button-row {
+    padding: 15px;
+    align-items: end;
+}
+.material-icons { 
+    font-size: 24px; 
+    vertical-align: middle; }
+.material-icons.md-36 { font-size: 36px; }
+.visually-hidden { 
+    position: absolute !important; 
+    width: 1px; 
+    height: 1px; 
+    margin: -1px; 
+    padding: 0; 
+    overflow: hidden; 
+    clip: rect(0 0 0 0); 
+    border: 0; 
+}
+.warning{ 
+    background: rgb(249, 240, 157); 
+    padding: 15px;
+    font-size: 0.7em; 
+    border-width: 3px;
+    border-radius: 8px;
+    border-color:rgb(216, 177, 36); 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+    overflow: hidden;
+    display: flex;          /* puts children in a row */
+    gap: 10px;              /* space between boxes */
+    justify-content: start;/* center them horizontally (optional) */
+    align-items: center;
+
+}
+.warning-header { 
+    padding: 5px; 
+    color: rgb(216, 177, 36); 
+    font-weight: bold; 
+    font-size: 1.5em; 
+    text-align:start
+}
+.warning-body { 
+    padding: 5px; 
+    text-align: start; 
+    font-size: 1.5em; 
+    font-weight: 300; 
+    color: rgb(147, 117, 11);  
+}
+.exclamation-icon {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  background: rgb(147, 117, 11);       /* red background */
+  border-radius: 50%;        /* makes it circular */
+  color: white;
+  font-weight: bold;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exclamation-icon::before {
+  content: "!";
+}
