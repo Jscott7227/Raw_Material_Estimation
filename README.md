@@ -1,32 +1,38 @@
-# FastAPI Dev Container Starter
+# Hackathon Monorepo
 
-This repository ships with a ready-to-go VS Code Dev Container for running and developing the included FastAPI app without touching your local Python toolchain.
+Unified workspace for the hackathon project. The repository ships with a Docker-based development workflow that spins up a Python FastAPI backend and a static frontend.
 
-## What You Need
-- Docker Desktop (or any Docker engine) up and running.
-- VS Code with the **Dev Containers** extension (ms-vscode-remote.remote-containers).
+## Prerequisites
+- Docker Desktop (macOS/Windows) or Docker Engine (Linux)
+- VS Code with the Dev Containers extension (`ms-vscode-remote.remote-containers`)
+- Git
 
-## Quick Start
-1. **Clone** the repository locally.
-2. **Open** the folder in VS Code. When prompted, select *Reopen in Container*. You can also trigger it manually with `> Dev Containers: Reopen in Container`.
-3. Wait for the build to finish. First start pulls the `python:3.11-slim` image, installs the dependencies from `requirements.txt`, and sets up oh-my-bash inside the container.
-4. Once the container is ready, the FastAPI app is available. Launch it with:
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-   VS Code will forward the exposed port so you can browse `http://localhost:8000`.
+## Quick Start (VS Code Dev Container)
+1. Clone the repository and open it in VS Code.
+2. When prompted, select `Dev Containers: Reopen in Container` (or run it from the Command Palette).
+3. The container build uses `docker-compose.yml` to start the `backend` service and mounts the workspace at `/app`.
+4. After the container starts, the post-create command runs `pip install -r requirements.txt` to ensure dependencies are installed.
+5. The backend is started with Uvicorn in reload mode; exposed port `8000` is forwarded automatically.
 
-## Live Development Tips
-- **Dependencies**: Update `requirements.txt` and run `pip install -r requirements.txt` inside the container. The devcontainer automatically reinstalls requirements on creation.
-- **Terminal profile**: oh-my-bash is installed by default, giving you a richer bash prompt inside the container.
-- **Hot reload**: `uvicorn` runs with `--reload`, so saving files triggers a restart automatically.
-- **Python environment**: The container runs code directly in `/app`, so no local virtualenv is required.
+## Running Locally with Docker Compose
+```bash
+docker compose up --build
+```
+- Backend available at `http://localhost:8000`
+- Frontend served from Nginx at `http://localhost:8080`
+
+## Repo Layout
+- `backend/` – FastAPI application, Dockerfile, and Python dependencies.
+- `frontend/` – Static site compiled into an Nginx container.
+- `docker-compose.yml` – Orchestrates backend and frontend for local development.
+- `.devcontainer/` – VS Code Dev Container configuration tied to the backend service.
+
+## Frontend Development
+- Edit `frontend/index.html` to customize the current static page.
+- Add any supporting assets (JS/CSS/images) in `frontend/` and update the Nginx `COPY` instructions in `frontend/Dockerfile` if new files are needed.
+- Rebuild the frontend container when Docker is available: `docker compose up --build frontend`.
 
 ## Troubleshooting
-- **Container fails to start**: Make sure Docker has at least 4 GB of memory and that there are no conflicting containers using port 8000.
-- **Extensions missing**: Install any language tooling (formatters, linters) from within the dev container so they persist in the container file system.
-- **Reset the container**: Run `> Dev Containers: Rebuild Container` if dependencies or tooling fall out of sync.
-
-## Next Steps
-- Add any project-specific docs here (API routes, workflows, etc.).
-- Update `.devcontainer/devcontainer.json` if you need additional tools or different lifecycle commands.
+- Rebuild the container if dependencies change: `Dev Containers: Rebuild Container`.
+- Ensure Docker Desktop has enough memory (4 GB+ recommended) and that ports `8000` and `8080` are free.
+- If the backend dependencies appear missing, run `pip install -r requirements.txt` inside the dev container terminal.
