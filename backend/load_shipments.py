@@ -20,8 +20,7 @@ from typing import Dict, Iterable, Optional, Sequence
 from sqlalchemy import func
 
 from database import SessionLocal, init_db
-from material import Material
-from truck_delivery import TruckDelivery
+from models import Material, TruckDelivery
 
 DATA_DIR = Path(__file__).parent / "data"
 DEFAULT_JSON = DATA_DIR / "shipments.json"
@@ -84,10 +83,10 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
         for entry in records:
             delivery_number = entry["deliveryNumber"]
             material_name = entry["material"]
-            incoming_weight = float(entry["incomingWeight"])
+            incoming_weight = float(entry.get("expectedWeight", entry.get("incomingWeight", 0)))
             status = entry.get("status", "pending")
             delivery_time = parse_delivery_datetime(entry["deliveryDateTime"])
-            material_weight = float(entry.get("materialWeight", 0.0))
+            material_weight = float(entry.get("actualWeight", entry.get("materialWeight", 0.0)))
 
             material = get_or_create_material(session, material_name)
 

@@ -1,9 +1,9 @@
 # app/db/database.py
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from material import Base, Material
-from truck_delivery import TruckDelivery
 from datetime import datetime
+
+from models import Base, Material, TruckDelivery
 
 DATABASE_URL = "sqlite:///./materials.db"
 
@@ -32,9 +32,9 @@ def init_test_delivery():
     test_delivery = TruckDelivery(
         delivery_num="TRK-TEST-001",
         incoming_weight=1000,
-        material_id = 1,
-        delivery_time=datetime.utcnow(),
-        status="pending"
+        material_id=1,
+        delivery_time=datetime.utcnow().isoformat(),
+        status="pending",
     )
 
     db.add(test_delivery)

@@ -9,10 +9,29 @@ function showTab(index) {
 
 let shipmentsData = [];
 let defaultShipmentDateBounds = { min: null, max: null };
+let materialsData = [];
+
+function formatTons(value) {
+    const normalized = Number(value) || 0;
+    return `${normalized.toLocaleString()} tons`;
+}
+
+function classifyMaterial(weight) {
+    if (weight >= 800) {
+        return { label: 'High Stock', tone: 'green' };
+    }
+    if (weight >= 400) {
+        return { label: 'Moderate Stock', tone: 'yellow' };
+    }
+    return { label: 'Low Stock', tone: 'red' };
+}
 
 function getCurrentDate() {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 function setDateInputs(start, end) {
@@ -34,17 +53,28 @@ function setDateInputs(start, end) {
 
 async function loadShipments() {
     try {
-        const [deliveriesResponse, materialsResponse] = await Promise.all([
-            fetch('http://localhost:8000/api/deliveries'),
-            fetch('http://localhost:8000/api/materials')
-        ]);
-
+        const deliveriesResponse = await fetch('http://localhost:8000/api/deliveries');
         if (!deliveriesResponse.ok) {
             throw new Error(`Failed to load deliveries: ${deliveriesResponse.status}`);
         }
 
         const deliveries = await deliveriesResponse.json();
-        const materials = materialsResponse.ok ? await materialsResponse.json() : [];
+
+        let materials = [];
+        try {
+            const materialsResponse = await fetch('http://localhost:8000/api/materials');
+            if (materialsResponse.ok) {
+                materials = await materialsResponse.json();
+            } else {
+                console.warn('Materials request failed:', materialsResponse.status);
+            }
+        } catch (materialError) {
+            console.warn('Unable to fetch materials:', materialError);
+        }
+
+        materialsData = materials;
+        renderMaterials();
+
         const materialMap = new Map(materials.map(material => [material.id, material.type]));
 
         shipmentsData = deliveries.map(delivery => {
@@ -52,8 +82,8 @@ async function loadShipments() {
             return {
                 deliveryNumber: delivery.delivery_num,
                 material: materialMap.get(delivery.material_id) || `Material ${delivery.material_id}`,
-                incomingWeight: Number(delivery.incoming_weight) || 0,
-                materialWeight: Number(delivery.material_weight ?? delivery.incoming_weight) || 0,
+                expectedWeight: Number(delivery.expected_weight || delivery.incoming_weight) || 0,
+                actualWeight: Number(delivery.actual_weight || delivery.material_weight) || 0,
                 deliveryDateTime,
                 status: delivery.status || 'pending'
             };
@@ -67,12 +97,11 @@ async function loadShipments() {
 
             defaultShipmentDateBounds.min = shipmentDates[0];
             defaultShipmentDateBounds.max = shipmentDates[shipmentDates.length - 1];
-            setDateInputs(defaultShipmentDateBounds.min, defaultShipmentDateBounds.max);
-        } else {
-            const today = getCurrentDate();
-            defaultShipmentDateBounds = { min: today, max: today };
-            setDateInputs(today, today);
         }
+        
+        // Always default to current day
+        const today = getCurrentDate();
+        setDateInputs(today, today);
 
         renderShipments();
     } catch (error) {
@@ -82,6 +111,8 @@ async function loadShipments() {
         defaultShipmentDateBounds = { min: today, max: today };
         setDateInputs(today, today);
         renderShipments();
+        materialsData = [];
+        renderMaterials();
     }
 }
 
@@ -110,8 +141,8 @@ function renderShipments() {
         row.innerHTML = `
             <td>${shipment.deliveryNumber}</td>
             <td>${shipment.material}</td>
-            <td>${shipment.incomingWeight.toLocaleString()} lbs</td>
-            <td>${shipment.materialWeight} stn</td>
+            <td>${shipment.expectedWeight.toLocaleString()} lbs</td>
+            <td>${shipment.actualWeight.toLocaleString()} lbs</td>
             <td>${shipment.deliveryDateTime}</td>
             <td><span class="status-${shipment.status} status-clickable" onclick="toggleStatus(${shipment.originalIndex})">${shipment.status.charAt(0).toUpperCase() + shipment.status.slice(1)}</span></td>
         `;
@@ -171,6 +202,62 @@ function updateDateRange() {
     renderShipments();
 }
 
+function renderMaterials() {
+    const cardsContainer = document.getElementById('materialCards');
+    const totalWeightLabel = document.getElementById('totalWeight');
+    const warningBanner = document.getElementById('iconWarning');
+    const warningText = document.getElementById('warningText');
+
+    if (!cardsContainer || !totalWeightLabel) {
+        return;
+    }
+
+    cardsContainer.innerHTML = '';
+
+    if (!Array.isArray(materialsData) || materialsData.length === 0) {
+        totalWeightLabel.textContent = 'Total Weight: 0 tons';
+        if (warningBanner) {
+            warningBanner.hidden = true;
+        }
+        return;
+    }
+
+    const lowStockMaterials = [];
+    let runningTotal = 0;
+
+    materialsData.forEach((material) => {
+        const weight = Number(material.weight) || 0;
+        runningTotal += weight;
+
+        const { label, tone } = classifyMaterial(weight);
+        if (tone === 'red') {
+            lowStockMaterials.push(material.type);
+        }
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <div class="row">
+                <div class="card-header ${tone}">${material.type}</div>
+            </div>
+            <div class="card-number">${formatTons(weight)}</div>
+            <div class="card-indicator ${tone}">${label}</div>
+        `;
+        cardsContainer.appendChild(card);
+    });
+
+    totalWeightLabel.textContent = `Total Weight: ${runningTotal.toLocaleString()} tons`;
+
+    if (warningBanner && warningText) {
+        if (lowStockMaterials.length > 0) {
+            warningText.textContent = `Important: ${lowStockMaterials.join(', ')} ${lowStockMaterials.length === 1 ? 'is' : 'are'} below safe capacity.`;
+            warningBanner.hidden = false;
+        } else {
+            warningBanner.hidden = true;
+        }
+    }
+}
+
 // Close date picker when clicking outside
 document.addEventListener('click', function(event) {
     const datePicker = document.getElementById('datePicker');
@@ -190,12 +277,12 @@ function setToday() {
 
 function setWeek() {
     const today = new Date();
-    const startOfWeek = new Date(today);
-    const endOfWeek = new Date(today);
-    endOfWeek.setDate(today.getDate() + 6);
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + 6);
     
-    const start = startOfWeek.toISOString().split('T')[0];
-    const end = endOfWeek.toISOString().split('T')[0];
+    const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+    
     setDateInputs(start, end);
     renderShipments();
 }
@@ -271,5 +358,11 @@ async function getAllWeights(material) {
         }); 
 }
 
-window.onload = loadShipments;
+window.addEventListener('load', () => {
+    document.getElementById('btnGenerateTotal')?.addEventListener('click', renderMaterials);
+    document.getElementById('btnPDFExport')?.addEventListener('click', () => {
+        console.log('PDF export requested. Implement export pipeline here.');
+    });
+    loadShipments();
+});
 window.addEventListener('DOMContentLoaded', getAllWeights);
