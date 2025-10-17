@@ -84,7 +84,7 @@ async function loadShipments() {
         renderMaterials();
         renderAlerts();
         renderRecommendations();
-        renderUsageRates();
+
         populateMaterialDropdown();
 
         const materialMap = new Map(materialsData.map(material => [material.id, material.type]));
@@ -404,69 +404,7 @@ function filterStatus(status) {
     }
 }
 
-function renderUsageRates() {
-    const grid = document.getElementById('usageRatesGrid');
-    const warningBanner = document.getElementById('usageWarning');
-    const warningText = document.getElementById('usageWarningText');
-    const avgLabel = document.getElementById('avgUsage');
 
-    if (!grid) {
-        return;
-    }
-
-    grid.innerHTML = '';
-
-    if (!Array.isArray(materialsData) || materialsData.length === 0) {
-        if (avgLabel) {
-            avgLabel.textContent = 'Average Usage: -- lbs/min';
-        }
-        if (warningBanner) {
-            warningBanner.hidden = true;
-            warningBanner.style.display = 'none';
-        }
-        return;
-    }
-
-    let totalRate = 0;
-    const elevatedMaterials = [];
-
-    materialsData.forEach((material) => {
-        const baseRate = (Number(material.weight) || 0) * 0.0012;
-        const usageRate = Number((baseRate + Math.random() * 1.5 + 1).toFixed(1));
-        totalRate += usageRate;
-
-        const tone = usageRate < 2 ? 'green' : usageRate < 4 ? 'yellow' : 'red';
-        if (tone === 'red') {
-            elevatedMaterials.push(material.type);
-        }
-
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.innerHTML = `
-            <div class="row">
-                <div class="card-header ${tone}">${material.type}</div>
-            </div>
-            <div class="card-number">${usageRate.toFixed(1)} lbs/min</div>
-        `;
-        grid.appendChild(card);
-    });
-
-    if (avgLabel) {
-        const averageRate = totalRate / materialsData.length;
-        avgLabel.textContent = `Average Usage: ${averageRate.toFixed(1)} lbs/min`;
-    }
-
-    if (warningBanner && warningText) {
-        if (elevatedMaterials.length) {
-            warningText.textContent = `Notice: ${elevatedMaterials.join(', ')} showing elevated usage rates.`;
-            warningBanner.hidden = false;
-            warningBanner.style.display = 'flex';
-        } else {
-            warningBanner.hidden = true;
-            warningBanner.style.display = 'none';
-        }
-    }
-}
 
 function populateMaterialDropdown() {
     const select = document.getElementById('materialSelect');
@@ -697,8 +635,7 @@ async function exportInventoryReport() {
 }
 window.addEventListener('load', () => {
     document.getElementById('btnPDFExport')?.addEventListener('click', exportInventoryReport);
-    document.getElementById('btnUsagePDFExport')?.addEventListener('click', exportInventoryReport);
-    document.getElementById('btnGenerateUsageReport')?.addEventListener('click', renderUsageRates);
+
     document.getElementById('btnAnalyzeImage')?.addEventListener('click', analyzeImage);
     document.getElementById('btnNewImage')?.addEventListener('click', resetImageUpload);
     document.getElementById('materialSelect')?.addEventListener('change', checkSubmitButton);
@@ -752,7 +689,7 @@ window.addEventListener('load', () => {
 
     loadShipments();
     setInterval(loadShipments, 15000);
-    renderUsageRates();
+
     populateMaterialDropdown();
     checkSubmitButton();
 });

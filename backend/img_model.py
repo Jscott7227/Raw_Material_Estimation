@@ -145,7 +145,7 @@ def calc_volume(image):
         filled_depth = masked_depth
 
     # ---- VOLUME CALCULATION ----
-    pixel_size_m = 0.003  # size of one pixel in meters
+    pixel_size_m = 0.0002  # size of one pixel in meters
     pile_volume_m3 = np.sum(filled_depth[combined_mask_resized > 0]) * (pixel_size_m ** 2)
     
     return overlay, pile_volume_m3
