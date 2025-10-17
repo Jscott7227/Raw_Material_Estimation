@@ -64,8 +64,8 @@ async function loadShipments() {
 
         materialsData = materials;
         renderMaterials();
-        console.log('renderMaterials() in loadShipments try function has run');
-
+        renderUsageRates();
+        populateMaterialDropdown();
 
         const materialMap = new Map(materials.map(material => [material.id, material.type]));
 
@@ -105,7 +105,8 @@ async function loadShipments() {
         renderShipments();
         materialsData = [];
         renderMaterials();
-        console.log('renderMaterials() in loadShipments catch has run');
+        renderUsageRates();
+        populateMaterialDropdown();
     }
 }
 
@@ -324,6 +325,52 @@ function filterStatus(status) {
     }
 }
 
+function renderUsageRates() {
+    const grid = document.getElementById('usageRatesGrid');
+    if (!grid) return;
+    
+    grid.innerHTML = '';
+    
+    if (!Array.isArray(materialsData) || materialsData.length === 0) {
+        return;
+    }
+    
+    materialsData.forEach(material => {
+        const usageRate = ((material.weight * 0.001) + Math.random() * 2 + 1).toFixed(1);
+        const colorClass = usageRate < 2 ? 'green' : usageRate < 4 ? 'yellow' : 'red';
+        
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <div class="row">
+                <div class="card-header ${colorClass}">${material.type}</div>
+            </div>
+            <div class="card-number">${usageRate} lbs/min</div>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+function populateMaterialDropdown() {
+    const select = document.getElementById('materialSelect');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Select a material...</option>';
+    
+    if (Array.isArray(materialsData) && materialsData.length > 0) {
+        materialsData.forEach(material => {
+            const option = document.createElement('option');
+            option.value = material.type;
+            option.textContent = material.type;
+            select.appendChild(option);
+        });
+    }
+    
+    // Add event listeners for validation
+    select.addEventListener('change', checkSubmitButton);
+    document.getElementById('densityInput').addEventListener('input', checkSubmitButton);
+}
+
 async function renderCards(material) { 
     const response = await fetch('../backend/data/currMaterialWeight.json'); 
     const currentWeight = await response.json(); 
@@ -397,6 +444,105 @@ function renderWarningMSG(list) {
     }
 }
 
+
+let uploadedFile = null;
+
+function handleImageUpload(event) {
+    uploadedFile = event.target.files[0];
+    if (uploadedFile) {
+        const uploadArea = document.getElementById('uploadArea');
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            uploadArea.innerHTML = `<img src="${e.target.result}" alt="Selected image" style="max-width: 100%; max-height: 200px; border-radius: 8px;">`;
+        };
+        reader.readAsDataURL(uploadedFile);
+        checkSubmitButton();
+    }
+}
+
+function checkSubmitButton() {
+    const materialSelect = document.getElementById('materialSelect');
+    const densityInput = document.getElementById('densityInput');
+    const submitButton = document.getElementById('btnAnalyzeImage');
+    
+    const hasImage = uploadedFile !== null;
+    const hasMaterial = materialSelect.value !== '';
+    const hasDensity = densityInput.value !== '';
+    
+    submitButton.disabled = !(hasImage && hasMaterial && hasDensity);
+}
+
+function analyzeImage() {
+    const uploadSection = document.getElementById('uploadSection');
+    const loadingSection = document.getElementById('loadingSection');
+    const analysisSection = document.getElementById('analysisSection');
+    const uploadedImage = document.getElementById('uploadedImage');
+    const resultNumber = document.getElementById('resultNumber');
+    const resultDetails = document.getElementById('resultDetails');
+    const materialSelect = document.getElementById('materialSelect');
+    const densityInput = document.getElementById('densityInput');
+    
+    // Lock the inputs after analysis starts
+    materialSelect.disabled = true;
+    densityInput.disabled = true;
+    
+    // Hide upload section and show loading
+    uploadSection.style.display = 'none';
+    loadingSection.style.display = 'block';
+    
+    // Display the uploaded image
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        uploadedImage.src = e.target.result;
+    };
+    reader.readAsDataURL(uploadedFile);
+    
+    // Show results after 5 seconds
+    setTimeout(() => {
+        const estimatedWeight = (Math.random() * 500 + 100).toFixed(1);
+        resultNumber.textContent = `${estimatedWeight} tons`;
+        resultDetails.textContent = 'Analysis complete';
+        
+        loadingSection.style.display = 'none';
+        analysisSection.style.display = 'flex';
+        document.getElementById('newImageSection').style.display = 'block';
+    }, 5000);
+}
+
+function resetImageUpload() {
+    const uploadSection = document.getElementById('uploadSection');
+    const materialSelection = document.getElementById('materialSelection');
+    const analysisSection = document.getElementById('analysisSection');
+    const newImageSection = document.getElementById('newImageSection');
+    const imageUpload = document.getElementById('imageUpload');
+    
+    // Reset file input and uploaded file
+    imageUpload.value = '';
+    uploadedFile = null;
+    
+    // Reset upload area content
+    document.getElementById('uploadArea').innerHTML = `
+        <div class="upload-text">Click to upload image or drag and drop</div>
+        <div class="upload-subtext">Supported formats: JPG, PNG, GIF</div>
+    `;
+    
+    // Show upload section and material selection, hide others
+    uploadSection.style.display = 'block';
+    materialSelection.style.display = 'block';
+    analysisSection.style.display = 'none';
+    newImageSection.style.display = 'none';
+    
+    // Clear form inputs and unlock them
+    const materialSelect = document.getElementById('materialSelect');
+    const densityInput = document.getElementById('densityInput');
+    materialSelect.value = '';
+    densityInput.value = '';
+    materialSelect.disabled = false;
+    densityInput.disabled = false;
+    
+    // Reset submit button
+    checkSubmitButton();
+}
 
 window.addEventListener('load', () => {
     loadShipments();
