@@ -5,9 +5,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Deque, Generator, List, Optional, Tuple
 from uuid import uuid4
+from img_model import calc_weight
+import cv2
+import numpy as np
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from io import BytesIO
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -1123,3 +1128,21 @@ def import_bill_of_lading(
     """Ingest a structured bill of lading payload and update material inventory."""
     delivery = _process_bill_of_lading(db, payload)
     return delivery
+
+
+@app.post("/api/weight")
+async def estimate_image_weight(file: UploadFile, density: float):
+    contents = await file.read()
+    np_arr = np.frombuffer(contents, np.uint8)
+    image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    if image is None:
+        return {"error": "Invalid image file"}
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    overlay, mass = calc_weight(image, density)
+    _, buffer = cv2.imencode(".png", overlay)
+    overlay_bytes = BytesIO(buffer.tobytes())
+    return StreamingResponse(
+        overlay_bytes,
+        media_type="image/png",
+        headers={"X-Mass-Short-Ton": f"{mass:.2f}"}
+    )
