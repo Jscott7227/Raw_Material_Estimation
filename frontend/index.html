@@ -24,16 +24,49 @@
     <div class="content active">
         <div class="warning" style="padding-left:20px" id="iconWarning" hidden>
             <div class="exclamation-icon"></div>
-            <div class="warning-body" id="warningText"></div>
+            <div class="warning-body">Important: Minspar and Feldspar are almost empty.</div>
         </div>
         <div class="row">
-            <div class="button-row" id="buttonRow" >
+            <div class="button-row" id="buttonRow">
                 <button class="button" id="btnGenerateTotal">Generate Total Weight</button>
                 <button class="button" id="btnPDFExport">Export PDF</button>
             </div>
-            <div class="card-number" style="padding-bottom:100px" id="totalWeight">Total Weight: 0 tons</div>
+            <div class="card-number" id="txtTotalWeight" style="padding-bottom:100px"></div>
         </div>
-        <div class="cards-grid" id="materialCards"></div>
+        <div class="cards-grid">
+            <div class="card">
+                <div class="row">
+                    <div class="card-header green">TN Stone</div>
+                    <!-- <div class="circle-icon green"></div> -->
+                    <!-- <div class="card-indicator green">High Stock</div> -->
+                </div>
+                <div class="card-number" id="TNStoneCurrTonne">720 st</div>
+            </div>
+            <div class="card">
+                <div class="card-header green">Super Strength 2</div>
+                <div class="card-number" id="SS2CurrTonne">840 st</div>
+            </div>
+            <div class="card">
+                <div class="card-header yellow">SMS Clay</div>
+                <div class="card-number" id="intSMSClayCurrTonne">420 st</div>
+            </div>
+            <div class="card">
+                <div class="card-header yellow">Sandspar</div>
+                <div class="card-number" id="intSandsparCurrTonne">420 kg</div>
+            </div>
+            <div class="card">
+                <div class="card-header red">Minspar</div>
+                <div class="card-number" id="intMinsparCurrTonne">350 st</div>
+            </div>
+            <div class="card">
+                <div class="card-header red">Feldspar</div>
+                <div class="card-number" id="intFeldsparCurrTonne">400 st</div>
+            </div>
+            <div class="card">
+                <div class="card-header yellow">LR28</div>
+                <div class="card-number" id="intLR28MWeightCurrTonne">480 st</div>
+            </div>
+        </div>
     </div>
     <div class="content">
         <div class="filter-controls">

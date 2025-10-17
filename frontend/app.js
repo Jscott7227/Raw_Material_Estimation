@@ -366,6 +366,52 @@ function renderUsageRates() {
     });
 }
 
+async function getAllWeights(material) { 
+    const response = await fetch('../backend/data/currMaterialWeight.json'); 
+    currentWeight = await response.json(); 
+    let total = 0;
+    const arrMaterialType = [ 
+        {id:'SS2',cardName:'SS2CurrTonne'}, 
+        {id:'TNStone', cardName:'TNStoneCurrTonne'}, 
+        {id:'SMSClay', cardName:'intSMSClayCurrTonne'}, 
+        {id:'LR28', cardName:'intLR28MWeightCurrTonne'}, 
+        {id:'Minispar', cardName:'intMinsparCurrTonne'}, 
+        {id:'Sandspar', cardName:'intSandsparCurrTonne'}, 
+        { id:'Feldspar', cardName:'intFeldsparCurrTonne'} ] 
+
+        arrMaterialType.forEach(item => { 
+            const weightObj = currentWeight.find(w => w.type === item.id); 
+            if (weightObj) {
+                let weightInStones = weightObj.weight;
+
+                document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
+                if(weightObj.metric == 'kg'){
+                    weightInStones = weightObj.weight/6.35029;
+                }
+                total += weightInStones;
+                console.log(item.id, weightInStones, total);
+            } 
+        }); 
+
+        document.getElementById('txtTotalWeight').innerHTML = `Total Weight: ${total.toFixed(0)} st`; 
+
+}
+
+// function calculateTotal(){
+//     arrMaterialType.forEach(item => { 
+//         const weightObj = currentWeight.find(w => w.type === item.id); 
+//         if (weightObj) {
+//             if(weightObj.metric == 'kg'){
+//                 weightInStones = weightObj.weight/6.35029;
+//             }
+//             document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
+//             total = total + weightInStones;
+//         } 
+//     }); 
+
+//     document.getElementById('txtTotalWeight').innerHTML = `Total Weight: ${total} stones`; 
+// }
+
 window.addEventListener('load', () => {
     document.getElementById('btnGenerateTotal')?.addEventListener('click', renderMaterials);
     document.getElementById('btnPDFExport')?.addEventListener('click', () => {
@@ -373,3 +419,5 @@ window.addEventListener('load', () => {
     });
     loadShipments();
 });
+
+window.addEventListener('DOMContentLoaded', getAllWeights);
