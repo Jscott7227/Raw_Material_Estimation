@@ -99,11 +99,25 @@ def get_image_mask(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     image, filtered_masks, _ = segment_grain_pile(image)
     if not filtered_masks:
         raise ValueError("Unable to locate material pile in supplied image.")
+    if image.ndim == 2:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        
+    if image.shape[2] == 3:
+        # Create a full 255 alpha channel (fully opaque)
+        alpha = np.full((image.shape[0], image.shape[1], 1), 255, dtype=image.dtype)
+        image = np.concatenate([image, alpha], axis=2)
+
     heatmap = (cm.jet(filtered_masks[0])[:, :, :3] * 255).astype(np.uint8)
-    overlay = cv2.addWeighted(image[:, :, ::-1], 0.5, heatmap, 0.5, 0)
+    overlay = cv2.addWeighted(image[:, :, :3], 0.5, heatmap, 0.5, 0)
     return overlay, filtered_masks[0]
 
 def calc_volume(image):
+    h, w = image.shape[:2]
+    scale = min(1280 / w, 1280 / h)
+    if scale < 1.0:
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
     overlay, mask = get_image_mask(image=image)
     midas = torch.hub.load("intel-isl/MiDaS", "MiDaS_small")
     midas.eval()
@@ -145,8 +159,13 @@ def calc_volume(image):
         filled_depth = masked_depth
 
     # ---- VOLUME CALCULATION ----
-    pixel_size_m = 0.0002  # size of one pixel in meters
+    object_real_length_ft = 19
+    object_real_length_m = object_real_length_ft * 0.3048
+    pixel_size_m = (object_real_length_m / 30) / W
+    print(pixel_size_m)
+    # pixel_size_m = 0.00017  # size of one pixel in meters
     pile_volume_m3 = np.sum(filled_depth[combined_mask_resized > 0]) * (pixel_size_m ** 2)
+    print(pile_volume_m3)
     
     return overlay, pile_volume_m3
 
