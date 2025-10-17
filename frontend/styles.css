@@ -13,6 +13,37 @@ body {
     padding: 50px 20px; 
     text-align: center; 
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hero-center {
+    flex: 1;
+    margin-left: 200px;
+}
+
+@media (max-width: 768px) {
+    .hero-logo {
+        display: none;
+    }
+    
+    .hero-center {
+        margin-left: 0;
+    }
+    
+    .hero h1 {
+        font-size: 2em;
+    }
+}
+
+.hero-logo {
+    position: absolute;
+    top: 26px;
+    left: 26px;
+    height: calc(100% - 52px);
+    width: auto;
 }
 
 .hero h1 { 

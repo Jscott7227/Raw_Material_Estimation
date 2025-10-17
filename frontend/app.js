@@ -74,6 +74,7 @@ async function loadShipments() {
 
         materialsData = materials;
         renderMaterials();
+        renderUsageRates();
 
         const materialMap = new Map(materials.map(material => [material.id, material.type]));
 
@@ -113,6 +114,7 @@ async function loadShipments() {
         renderShipments();
         materialsData = [];
         renderMaterials();
+        renderUsageRates();
     }
 }
 
@@ -336,6 +338,32 @@ function filterStatus(status) {
             rows[i].style.display = rows[i].classList.contains(status) ? '' : 'none';
         }
     }
+}
+
+function renderUsageRates() {
+    const grid = document.getElementById('usageRatesGrid');
+    if (!grid) return;
+    
+    grid.innerHTML = '';
+    
+    if (!Array.isArray(materialsData) || materialsData.length === 0) {
+        return;
+    }
+    
+    materialsData.forEach(material => {
+        const usageRate = ((material.weight * 0.001) + Math.random() * 2 + 1).toFixed(1);
+        const colorClass = usageRate < 2 ? 'green' : usageRate < 4 ? 'yellow' : 'red';
+        
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <div class="row">
+                <div class="card-header ${colorClass}">${material.type}</div>
+            </div>
+            <div class="card-number">${usageRate} lbs/min</div>
+        `;
+        grid.appendChild(card);
+    });
 }
 
 window.addEventListener('load', () => {

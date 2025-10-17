@@ -8,13 +8,17 @@
 </head>
 <body>
     <div class="hero">
-        <h1>Raw Materials Dashboard</h1>
-        <div class="subtitle">Portobello America - Innovative Tile Solutions</div>
+        <img src="images/Portobello_Logo_White.png" alt="Portobello America Logo" class="hero-logo">
+        <div class="hero-center">
+            <h1>Raw Materials Dashboard</h1>
+            <div class="subtitle">Innovative Tile Solutions</div>
+        </div>
     </div>
     
     <div class="tabs">
         <div class="tab active" onclick="showTab(0)">Raw Weight</div>
         <div class="tab" onclick="showTab(1)">Truck Data</div>
+        <div class="tab" onclick="showTab(2)">Usage Rates</div>
     </div>
     
     <div class="content active">
@@ -68,6 +72,22 @@
             <tbody id="truckTableBody">
             </tbody>
         </table>
+    </div>
+    
+    <div class="content">
+        <div class="warning" style="padding-left:20px" id="usageWarning">
+            <div class="exclamation-icon"></div>
+            <div class="warning-body">Notice: Materials C and F have high usage rates.</div>
+        </div>
+        <div class="row">
+            <div class="button-row" id="usageButtonRow">
+                <button class="button" id="btnGenerateUsageReport">Generate Usage Report</button>
+                <button class="button" id="btnUsagePDFExport">Export PDF</button>
+            </div>
+            <div class="card-number" style="padding-bottom:100px">Average Usage: 2.8 lbs/min</div>
+        </div>
+        <div class="cards-grid" id="usageRatesGrid">
+        </div>
     </div>
     
     <script src="app.js"></script>
