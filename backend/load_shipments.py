@@ -20,7 +20,7 @@ from typing import Dict, Iterable, Optional, Sequence
 from sqlalchemy import func
 
 from database import SessionLocal, init_db
-from models import Material, TruckDelivery
+from models import Material, TruckDelivery, MaterialInventoryHistory
 
 DATA_DIR = Path(__file__).parent / "data"
 DEFAULT_JSON = DATA_DIR / "shipments.json"
@@ -67,6 +67,8 @@ def parse_delivery_datetime(raw: str) -> str:
 
 def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
     """Persist shipment records, optionally clearing existing deliveries first."""
+    # This entry point is shared by CLI imports and potential integrations that provide
+    # structured shipment payloads (e.g., nightly exports from logistics systems).
     init_db()
     session = SessionLocal()
 
@@ -74,6 +76,15 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
         if reset:
             session.query(TruckDelivery).delete()
             session.query(Material).update({"weight": 0.0})
+            timestamp = datetime.utcnow()
+            for material in session.query(Material).all():
+                session.add(
+                    MaterialInventoryHistory(
+                        material_id=material.id,
+                        weight=0.0,
+                        recorded_at=timestamp,
+                    )
+                )
             session.commit()
 
         imported = 0
@@ -114,16 +125,26 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
                 imported += 1
 
             if status.lower() == "completed":
+                # Accumulate material-specific totals so we can overwrite inventory
+                # with the values present in the import file.
                 material_totals[material.id] += material_weight
 
         session.commit()
 
         if material_totals:
+            timestamp = datetime.utcnow()
             # Only update weights for materials represented in the shipment data.
             for material_id, total_weight in material_totals.items():
                 material = session.get(Material, material_id)
                 if material:
                     material.weight = math.floor(total_weight)
+                    session.add(
+                        MaterialInventoryHistory(
+                            material_id=material.id,
+                            weight=material.weight,
+                            recorded_at=timestamp,
+                        )
+                    )
             session.commit()
 
         print(f"Shipments imported: {imported}, updated: {updated}")

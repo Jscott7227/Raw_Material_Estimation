@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
-from models import Base, Material, TruckDelivery
+from models import Base, Material, TruckDelivery, MaterialInventoryHistory
 
 DATABASE_URL = "sqlite:///./materials.db"
 
@@ -18,6 +18,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     init_materials()  # Preload materials
     init_test_delivery()
+    seed_inventory_history()
     
 def init_test_delivery():
     """Add a temporary test truck delivery if none exists"""
@@ -40,6 +41,26 @@ def init_test_delivery():
     db.add(test_delivery)
     db.commit()
     db.close()
+
+
+def seed_inventory_history():
+    """Ensure at least one inventory snapshot exists for each material"""
+    db = SessionLocal()
+    try:
+        if db.query(MaterialInventoryHistory).count() > 0:
+            return
+        timestamp = datetime.utcnow()
+        for material in db.query(Material).all():
+            db.add(
+                MaterialInventoryHistory(
+                    material_id=material.id,
+                    weight=material.weight,
+                    recorded_at=timestamp,
+                )
+            )
+        db.commit()
+    finally:
+        db.close()
 
 def init_materials():
     """Initialize DB with 6 default materials with 0 weight and humidity"""

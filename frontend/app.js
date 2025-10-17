@@ -7,23 +7,28 @@ function showTab(index) {
     });
 }
 
+// Client-side caches for the dashboard views; data is refreshed every 15 seconds.
 let shipmentsData = [];
 let defaultShipmentDateBounds = { min: null, max: null };
 let materialsData = [];
+let activeAlerts = [];
+let isPollingShipments = false;
+let recommendationsData = [];
 
 function formatTons(value) {
     const normalized = Number(value) || 0;
     return `${normalized.toLocaleString()} tons`;
 }
 
-function classifyMaterial(weight) {
-    if (weight >= 800) {
-        return { label: 'High Stock', tone: 'green' };
+function classifyMaterialByBin(material) {
+    const fillPercentage = Math.max(0, Math.min(100, Math.round((material.fill_ratio || 0) * 100)));
+    if (material.needs_reorder) {
+        return { label: 'Reorder Needed', tone: 'red', fillPercentage };
     }
-    if (weight >= 400) {
-        return { label: 'Moderate Stock', tone: 'yellow' };
+    if (fillPercentage >= 80) {
+        return { label: 'Healthy Stock', tone: 'green', fillPercentage };
     }
-    return { label: 'Low Stock', tone: 'red' };
+    return { label: 'Moderate Stock', tone: 'yellow', fillPercentage };
 }
 
 function getCurrentDate() {
@@ -49,30 +54,34 @@ function setDateInputs(start, end) {
 }
 
 async function loadShipments() {
+    if (isPollingShipments) {
+        return;
+    }
+    isPollingShipments = true;
+
     try {
-        const deliveriesResponse = await fetch('http://localhost:8000/api/deliveries');
+        const [deliveriesResponse, materialsResponse, alertsResponse, recommendationsResponse] = await Promise.all([
+            // In production, these calls are fed by live MES/TMS integrations.
+            fetch('http://localhost:8000/api/deliveries'),
+            fetch('http://localhost:8000/api/materials'),
+            fetch('http://localhost:8000/api/alerts'),
+            fetch('http://localhost:8000/api/recommendations?days=7')
+        ]);
+
         if (!deliveriesResponse.ok) {
             throw new Error(`Failed to load deliveries: ${deliveriesResponse.status}`);
         }
 
         const deliveries = await deliveriesResponse.json();
+        materialsData = materialsResponse.ok ? await materialsResponse.json() : [];
+        activeAlerts = alertsResponse.ok ? await alertsResponse.json() : [];
+        recommendationsData = recommendationsResponse.ok ? await recommendationsResponse.json() : [];
 
-        let materials = [];
-        try {
-            const materialsResponse = await fetch('http://localhost:8000/api/materials');
-            if (materialsResponse.ok) {
-                materials = await materialsResponse.json();
-            } else {
-                console.warn('Materials request failed:', materialsResponse.status);
-            }
-        } catch (materialError) {
-            console.warn('Unable to fetch materials:', materialError);
-        }
-
-        materialsData = materials;
         renderMaterials();
+        renderAlerts();
+        renderRecommendations();
 
-        const materialMap = new Map(materials.map(material => [material.id, material.type]));
+        const materialMap = new Map(materialsData.map(material => [material.id, material.type]));
 
         shipmentsData = deliveries.map(delivery => {
             const deliveryDateTime = (delivery.delivery_time || '').replace('T', ' ');
@@ -103,7 +112,7 @@ async function loadShipments() {
 
         renderShipments();
     } catch (error) {
-        console.error('Failed to load shipments:', error);
+        console.error('Failed to load dashboard data:', error);
         shipmentsData = [];
         const today = getCurrentDate();
         defaultShipmentDateBounds = { min: today, max: today };
@@ -111,6 +120,12 @@ async function loadShipments() {
         renderShipments();
         materialsData = [];
         renderMaterials();
+        activeAlerts = [];
+        renderAlerts();
+        recommendationsData = [];
+        renderRecommendations();
+    } finally {
+        isPollingShipments = false;
     }
 }
 
@@ -203,8 +218,6 @@ function updateDateRange() {
 function renderMaterials() {
     const cardsContainer = document.getElementById('materialCards');
     const totalWeightLabel = document.getElementById('totalWeight');
-    const warningBanner = document.getElementById('iconWarning');
-    const warningText = document.getElementById('warningText');
 
     if (!cardsContainer || !totalWeightLabel) {
         return;
@@ -214,23 +227,16 @@ function renderMaterials() {
 
     if (!Array.isArray(materialsData) || materialsData.length === 0) {
         totalWeightLabel.textContent = 'Total Weight: 0 tons';
-        if (warningBanner) {
-            warningBanner.hidden = true;
-        }
         return;
     }
 
-    const lowStockMaterials = [];
     let runningTotal = 0;
 
     materialsData.forEach((material) => {
         const weight = Number(material.weight) || 0;
         runningTotal += weight;
 
-        const { label, tone } = classifyMaterial(weight);
-        if (tone === 'red') {
-            lowStockMaterials.push(material.type);
-        }
+        const { label, tone, fillPercentage } = classifyMaterialByBin(material);
 
         const card = document.createElement('div');
         card.className = 'card';
@@ -239,21 +245,79 @@ function renderMaterials() {
                 <div class="card-header ${tone}">${material.type}</div>
             </div>
             <div class="card-number">${formatTons(weight)}</div>
+            <div class="card-subtitle">Fill: ${fillPercentage}% (${Number(material.bins_filled ?? 0).toFixed(2)} bins)</div>
             <div class="card-indicator ${tone}">${label}</div>
         `;
         cardsContainer.appendChild(card);
     });
 
     totalWeightLabel.textContent = `Total Weight: ${runningTotal.toLocaleString()} tons`;
+}
 
-    if (warningBanner && warningText) {
-        if (lowStockMaterials.length > 0) {
-            warningText.textContent = `Important: ${lowStockMaterials.join(', ')} ${lowStockMaterials.length === 1 ? 'is' : 'are'} below safe capacity.`;
-            warningBanner.hidden = false;
-        } else {
-            warningBanner.hidden = true;
-        }
+function renderAlerts() {
+    const warningBanner = document.getElementById('iconWarning');
+    const warningText = document.getElementById('warningText');
+
+    if (!warningBanner || !warningText) {
+        return;
     }
+
+    if (!Array.isArray(activeAlerts) || activeAlerts.length === 0) {
+        warningBanner.hidden = true;
+        warningBanner.style.display = 'none';
+        warningText.innerHTML = '';
+        return;
+    }
+
+    const filteredAlerts = activeAlerts.filter(alert => alert.alert_level === 'critical');
+    if (filteredAlerts.length === 0) {
+        warningBanner.hidden = true;
+        warningBanner.style.display = 'none';
+        warningText.innerHTML = '';
+        return;
+    }
+
+    const alertMarkup = filteredAlerts
+        .map(alert => `<div class="alert-line alert-${alert.alert_level}">${alert.message}</div>`)
+        .join('');
+
+    warningText.innerHTML = alertMarkup;
+    warningBanner.hidden = false;
+    warningBanner.style.display = 'flex';
+}
+
+function renderRecommendations() {
+    const list = document.getElementById('recommendationsList');
+    if (!list) {
+        return;
+    }
+
+    list.innerHTML = '';
+
+    if (!Array.isArray(recommendationsData) || recommendationsData.length === 0) {
+        list.innerHTML = '<div class="recommendation-item"><span>No order actions needed this week.</span></div>';
+        return;
+    }
+
+    recommendationsData.forEach((rec) => {
+        const item = document.createElement('div');
+        item.className = 'recommendation-item';
+
+        const left = document.createElement('div');
+        left.innerHTML = `<strong>${rec.material_type}</strong><div class="recommendation-meta">Current: ${formatTons(rec.current_weight)} · Avg daily: ${rec.average_daily_consumption.toLocaleString()} tons</div>`;
+
+        const right = document.createElement('div');
+        if (rec.recommended_order_tons) {
+            const eta = rec.recommended_order_date ? new Date(rec.recommended_order_date).toLocaleDateString() : 'ASAP';
+            right.innerHTML = `<strong>${rec.recommended_order_tons.toLocaleString()} tons</strong><div class="recommendation-meta">Order by ${eta}</div>`;
+        } else {
+            right.innerHTML = `<div class="recommendation-meta">${rec.rationale}</div>`;
+        }
+
+        item.appendChild(left);
+        item.appendChild(right);
+        list.appendChild(item);
+    });
 }
 
 // Close date picker when clicking outside
@@ -342,4 +406,5 @@ window.addEventListener('load', () => {
         console.log('PDF export requested. Implement export pipeline here.');
     });
     loadShipments();
+    setInterval(loadShipments, 15000);
 });

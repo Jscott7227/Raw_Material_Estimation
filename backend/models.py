@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, Float, ForeignKey, Integer, String
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -46,3 +46,13 @@ class TruckDelivery(Base):
 
     material = relationship("Material", back_populates="deliveries")
 
+
+class MaterialInventoryHistory(Base):
+    __tablename__ = "material_inventory_history"
+
+    id: int = Column(Integer, primary_key=True, index=True)
+    material_id: int = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
+    weight: float = Column(Float, nullable=False)
+    recorded_at: datetime = Column(DateTime, default=datetime.utcnow, index=True)
+
+    material = relationship("Material", backref="history")
