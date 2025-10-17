@@ -19,6 +19,7 @@
         <div class="tab active" onclick="showTab(0)">Raw Weight</div>
         <div class="tab" onclick="showTab(1)">Truck Data</div>
         <div class="tab" onclick="showTab(2)">Usage Rates</div>
+        <div class="tab" onclick="showTab(3)">Weight Est.</div>
     </div>
     
     <div class="content active">
@@ -120,6 +121,55 @@
             <div class="card-number" style="padding-bottom:100px">Average Usage: 2.8 lbs/min</div>
         </div>
         <div class="cards-grid" id="usageRatesGrid">
+        </div>
+    </div>
+    
+    <div class="content">
+        <div class="weight-estimation-container">
+            <h2>Material Weight Estimation</h2>
+            <div class="material-selection" id="materialSelection">
+                <div class="input-row">
+                    <div class="input-group">
+                        <label for="materialSelect">Select Material Type:</label>
+                        <select id="materialSelect">
+                            <option value="">Loading materials...</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="densityInput">Density (g/cm³):</label>
+                        <input type="number" id="densityInput" step="0.01" min="0" placeholder="e.g. 2.65">
+                    </div>
+                </div>
+            </div>
+            <div class="upload-section" id="uploadSection">
+                <label for="imageUpload" class="upload-label">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-text">Click to upload image or drag and drop</div>
+                        <div class="upload-subtext">Supported formats: JPG, PNG, GIF</div>
+                    </div>
+                </label>
+                <input type="file" id="imageUpload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+                <div class="submit-section">
+                    <button class="button" id="btnAnalyzeImage" onclick="analyzeImage()" disabled>Analyze Image</button>
+                </div>
+            </div>
+            <div class="analysis-section" id="analysisSection" style="display: none;">
+                <div class="image-display">
+                    <img id="uploadedImage" src="" alt="Uploaded material" />
+                </div>
+                <div class="estimation-result">
+                    <h3>Estimated Weight:</h3>
+                    <div class="result-number" id="resultNumber">0 tons</div>
+                    <div class="result-details" id="resultDetails">Analysis complete</div>
+                </div>
+            </div>
+            <div class="loading-section" id="loadingSection" style="display: none;">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Analyzing image...</div>
+            </div>
+            <div class="new-image-section" id="newImageSection" style="display: none;">
+                <button class="button" id="btnNewImage" onclick="resetImageUpload()">New Image</button>
+            </div>
         </div>
     </div>
     
