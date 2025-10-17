@@ -156,5 +156,7 @@ def calc_weight(image, density):
     mass_kg = vol * density
     mass_short_ton = mass_kg / short_ton
     return overlay, mass_short_ton
-        
+
+
+
 __all__ = ["calc_weight"]
