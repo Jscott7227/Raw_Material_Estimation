@@ -298,3 +298,7 @@ body {
 .exclamation-icon::before {
   content: "!";
 }
+
+[hidden] {
+  display: none !important;
+}
