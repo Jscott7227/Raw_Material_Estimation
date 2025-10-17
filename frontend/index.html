@@ -13,55 +13,23 @@
     </div>
     
     <div class="tabs">
-        <div class="tab active" onclick="showTab(0)">Raw Weight</div>
-        <div class="tab" onclick="showTab(1)">Truck Data</div>
+        <div class="tab active" data-tab-index="0">Raw Weight</div>
+        <div class="tab" data-tab-index="1">Truck Data</div>
     </div>
     
     <div class="content active">
-        <div class="warning" style="padding-left:20px" id="iconWarning" hidden>
+        <div class="warning" id="iconWarning" hidden>
             <div class="exclamation-icon"></div>
-            <div class="warning-body">Important: Minspar and Feldspar are almost empty.</div>
+            <div class="warning-body" id="warningText"></div>
         </div>
         <div class="row">
             <div class="button-row" id="buttonRow">
-                <button class="button" id="btnGenerateTotal">Generate Total Weight</button>
-                <button class="button" id="btnPDFExport">Export PDF</button>
+                <button class="button button-sm" id="btnPDFExport">
+                    <span class="button-icon" aria-hidden="true">📄</span>
+                    <span class="button-label">Export PDF</span>
+                </button>
             </div>
-            <div class="card-number" id="txtTotalWeight" style="padding-bottom:100px"></div>
-        </div>
-        <div class="cards-grid">
-            <div class="card">
-                <div class="row">
-                    <div class="card-header green">TN Stone</div>
-                    <!-- <div class="circle-icon green"></div> -->
-                    <!-- <div class="card-indicator green">High Stock</div> -->
-                </div>
-                <div class="card-number" id="TNStoneCurrTonne">720 st</div>
-            </div>
-            <div class="card">
-                <div class="card-header green">Super Strength 2</div>
-                <div class="card-number" id="SS2CurrTonne">840 st</div>
-            </div>
-            <div class="card">
-                <div class="card-header yellow">SMS Clay</div>
-                <div class="card-number" id="intSMSClayCurrTonne">420 st</div>
-            </div>
-            <div class="card">
-                <div class="card-header yellow">Sandspar</div>
-                <div class="card-number" id="intSandsparCurrTonne">420 kg</div>
-            </div>
-            <div class="card">
-                <div class="card-header red">Minspar</div>
-                <div class="card-number" id="intMinsparCurrTonne">350 st</div>
-            </div>
-            <div class="card">
-                <div class="card-header red">Feldspar</div>
-                <div class="card-number" id="intFeldsparCurrTonne">400 st</div>
-            </div>
-            <div class="card">
-                <div class="card-header yellow">LR28</div>
-                <div class="card-number" id="intLR28MWeightCurrTonne">480 st</div>
-            </div>
+            <div class="card-number total-weight" id="totalWeight">Total Weight: 0 tons</div>
         </div>
         <div class="cards-grid" id="materialCards"></div>
         <div class="recommendations-panel">
@@ -72,24 +40,24 @@
     <div class="content">
         <div class="filter-controls">
             <div class="left-controls">
-                <input type="text" id="truckSearch" placeholder="Search by truck number..." onkeyup="searchTruck()">
+                <input type="text" id="truckSearch" placeholder="Search by truck number...">
                 <div class="date-filter-container">
-                    <input type="text" id="dateRange" placeholder="Select date or range..." readonly onclick="showDatePicker()">
+                    <input type="text" id="dateRange" placeholder="Select date or range..." readonly>
                     <div id="datePicker" class="date-picker-popup" style="display: none;">
                         <div class="date-picker-header">
-                            <button type="button" onclick="setToday()">Today</button>
-                            <button type="button" onclick="setWeek()">This Week</button>
-                            <button type="button" onclick="clearRange()">Clear</button>
+                            <button type="button" id="btnToday">Today</button>
+                            <button type="button" id="btnWeek">This Week</button>
+                            <button type="button" id="btnClear">Clear</button>
                         </div>
-                        <input type="date" id="startDate" onchange="onStartDateChange()">
-                        <input type="date" id="endDate" onchange="onEndDateChange()">
+                        <input type="date" id="startDate">
+                        <input type="date" id="endDate">
                     </div>
                 </div>
             </div>
             <div class="status-filters">
-                <button class="filter-btn active" onclick="filterStatus('all')">All</button>
-                <button class="filter-btn" onclick="filterStatus('completed')">Completed</button>
-                <button class="filter-btn" onclick="filterStatus('upcoming')">Upcoming</button>
+                <button class="filter-btn active" data-status="all">All</button>
+                <button class="filter-btn" data-status="completed">Completed</button>
+                <button class="filter-btn" data-status="upcoming">Upcoming</button>
             </div>
         </div>
         <table class="truck-table" id="truckTable">

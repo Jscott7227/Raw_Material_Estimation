@@ -86,9 +86,10 @@ async function loadShipments() {
 
         const materialMap = new Map(materialsData.map(material => [material.id, material.type]));
 
-        shipmentsData = deliveries.map(delivery => {
+        shipmentsData = deliveries.map((delivery, index) => {
             const deliveryDateTime = (delivery.delivery_time || '').replace('T', ' ');
             return {
+                id: index,
                 deliveryNumber: delivery.delivery_num,
                 material: materialMap.get(delivery.material_id) || `Material ${delivery.material_id}`,
                 expectedWeight: Number(delivery.expected_weight || delivery.incoming_weight) || 0,
@@ -139,7 +140,6 @@ function renderShipments() {
     
     // Filter shipments by date range and sort by status (completed first)
     const filteredShipments = shipmentsData
-        .map((shipment, index) => ({ ...shipment, originalIndex: index }))
         .filter(shipment => {
             const shipmentDate = shipment.deliveryDateTime.split(' ')[0];
             return shipmentDate >= startDate && shipmentDate <= endDate;
@@ -159,7 +159,7 @@ function renderShipments() {
             <td>${shipment.expectedWeight.toLocaleString()} lbs</td>
             <td>${shipment.actualWeight.toLocaleString()} lbs</td>
             <td>${shipment.deliveryDateTime}</td>
-            <td><span class="status-${shipment.status} status-clickable" onclick="toggleStatus(${shipment.originalIndex})">${shipment.status.charAt(0).toUpperCase() + shipment.status.slice(1)}</span></td>
+            <td><span class="status-${shipment.status} status-clickable" data-shipment-id="${shipment.id}">${shipment.status.charAt(0).toUpperCase() + shipment.status.slice(1)}</span></td>
         `;
         tbody.appendChild(row);
     });
@@ -328,7 +328,7 @@ document.addEventListener('click', function(event) {
     const dateRange = document.getElementById('dateRange');
     const container = document.querySelector('.date-filter-container');
     
-    if (!container.contains(event.target)) {
+    if (container && !container.contains(event.target)) {
         datePicker.style.display = 'none';
     }
 });
@@ -373,10 +373,13 @@ function searchTruck() {
     }
 }
 
-function toggleStatus(index) {
-    shipmentsData[index].status = shipmentsData[index].status === 'completed' ? 'upcoming' : 'completed';
-    renderShipments();
-    updateJsonFile();
+function toggleStatus(shipmentId) {
+    const shipment = shipmentsData.find(s => s.id === shipmentId);
+    if (shipment) {
+        shipment.status = shipment.status === 'completed' ? 'upcoming' : 'completed';
+        renderShipments();
+        updateJsonFile();
+    }
 }
 
 function updateJsonFile() {
@@ -388,10 +391,6 @@ function updateJsonFile() {
 function filterStatus(status) {
     const table = document.getElementById('truckTable');
     const rows = table.getElementsByTagName('tr');
-    const buttons = document.querySelectorAll('.filter-btn');
-    
-    buttons.forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
     
     for (let i = 1; i < rows.length; i++) {
         if (status === 'all') {
@@ -402,59 +401,73 @@ function filterStatus(status) {
     }
 }
 
-async function getAllWeights(material) { 
-    const response = await fetch('../backend/data/currMaterialWeight.json'); 
-    currentWeight = await response.json(); 
-    let total = 0;
-    const arrMaterialType = [ 
-        {id:'SS2',cardName:'SS2CurrTonne'}, 
-        {id:'TNStone', cardName:'TNStoneCurrTonne'}, 
-        {id:'SMSClay', cardName:'intSMSClayCurrTonne'}, 
-        {id:'LR28', cardName:'intLR28MWeightCurrTonne'}, 
-        {id:'Minispar', cardName:'intMinsparCurrTonne'}, 
-        {id:'Sandspar', cardName:'intSandsparCurrTonne'}, 
-        { id:'Feldspar', cardName:'intFeldsparCurrTonne'} ] 
+async function exportInventoryReport() {
+    const button = document.getElementById('btnPDFExport');
+    if (!button) {
+        return;
+    }
 
-        arrMaterialType.forEach(item => { 
-            const weightObj = currentWeight.find(w => w.type === item.id); 
-            if (weightObj) {
-                let weightInStones = weightObj.weight;
+    // Request the server-side PDF summary and trigger a download when it returns.
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Generating...';
 
-                document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
-                if(weightObj.metric == 'kg'){
-                    weightInStones = weightObj.weight/6.35029;
-                }
-                total += weightInStones;
-                console.log(item.id, weightInStones, total);
-            } 
-        }); 
+    try {
+        const response = await fetch('http://localhost:8000/api/report/inventory');
+        if (!response.ok) {
+            throw new Error(`Export failed with status ${response.status}`);
+        }
 
-        document.getElementById('txtTotalWeight').innerHTML = `Total Weight: ${total.toFixed(0)} st`; 
-
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const timestamp = new Date().toISOString().split('T')[0];
+        link.href = url;
+        link.download = `inventory-report-${timestamp}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error('Failed to export PDF:', error);
+        alert('Unable to export the PDF report right now. Please try again shortly.');
+    } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+    }
 }
-
-// function calculateTotal(){
-//     arrMaterialType.forEach(item => { 
-//         const weightObj = currentWeight.find(w => w.type === item.id); 
-//         if (weightObj) {
-//             if(weightObj.metric == 'kg'){
-//                 weightInStones = weightObj.weight/6.35029;
-//             }
-//             document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
-//             total = total + weightInStones;
-//         } 
-//     }); 
-
-//     document.getElementById('txtTotalWeight').innerHTML = `Total Weight: ${total} stones`; 
-// }
-
 window.addEventListener('load', () => {
-    document.getElementById('btnGenerateTotal')?.addEventListener('click', renderMaterials);
-    document.getElementById('btnPDFExport')?.addEventListener('click', () => {
-        console.log('PDF export requested. Implement export pipeline here.');
+    document.getElementById('btnPDFExport')?.addEventListener('click', exportInventoryReport);
+    
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => showTab(parseInt(tab.dataset.tabIndex)));
     });
+
+    document.getElementById('truckSearch')?.addEventListener('keyup', searchTruck);
+
+    document.getElementById('dateRange')?.addEventListener('click', showDatePicker);
+    document.getElementById('startDate')?.addEventListener('change', onStartDateChange);
+    document.getElementById('endDate')?.addEventListener('change', onEndDateChange);
+
+    document.getElementById('btnToday')?.addEventListener('click', setToday);
+    document.getElementById('btnWeek')?.addEventListener('click', setWeek);
+    document.getElementById('btnClear')?.addEventListener('click', clearRange);
+
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', (event) => {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            filterStatus(event.target.dataset.status);
+        });
+    });
+
+    document.getElementById('truckTableBody')?.addEventListener('click', (event) => {
+        if (event.target.classList.contains('status-clickable')) {
+            const shipmentId = parseInt(event.target.dataset.shipmentId);
+            toggleStatus(shipmentId);
+        }
+    });
+
     loadShipments();
     setInterval(loadShipments, 15000);
 });
-
-window.addEventListener('DOMContentLoaded', getAllWeights);

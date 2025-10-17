@@ -4,7 +4,6 @@ sqlalchemy
 pydantic
 swagger-ui-bundle==0.0.9
 SQLAlchemy==2.0.38
-SQLAlchemy==2.0.38
 segment-anything-py
 torch>=1.7
 torchvision>=0.8
@@ -13,3 +12,4 @@ opencv-python-headless>=4.8
 pillow>=10.0
 matplotlib>=3.8
 timm>=0.9.0
+reportlab

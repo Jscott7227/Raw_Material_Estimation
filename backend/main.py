@@ -1,8 +1,10 @@
 import asyncio
+import math
 import random
 from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from io import BytesIO
 from typing import Deque, Generator, List, Optional, Tuple
 from uuid import uuid4
 from img_model import calc_weight
@@ -11,10 +13,20 @@ import numpy as np
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from io import BytesIO
+from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.graphics.charts.legends import Legend
+from reportlab.graphics.charts.lineplots import LinePlot
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.widgets.markers import makeMarker
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from database import SessionLocal, init_db
 from load_shipments import (
@@ -134,7 +146,7 @@ def _record_history(db: Session, materials: List[Material]) -> None:
 
 
 def _material_alerts(material: Material) -> List[MaterialAlert]:
-    """Return any alert records associated with the current material level."""
+    """Return alert records for *material*, including lead-time guidance when capacity is low."""
     metrics = _material_metrics(material)
     alerts: List[MaterialAlert] = []
     ratio = metrics["fill_ratio"]
@@ -153,10 +165,19 @@ def _material_alerts(material: Material) -> List[MaterialAlert]:
                         f"({material.weight:.1f} tons remaining; {(ratio * 100):.0f}% full). "
                         f"Lead time is {ORDER_LEAD_TIME_DAYS} days—place an order now."
                     ),
-                )
             )
+        )
 
     return alerts
+
+
+def _material_status(fill_ratio: float) -> Tuple[str, colors.Color]:
+    """Map a fill ratio to a human-friendly status string and its accent color."""
+    if fill_ratio <= REORDER_THRESHOLD_RATIO:
+        return "Critical", colors.HexColor("#dc2626")
+    if fill_ratio <= WARNING_THRESHOLD_RATIO:
+        return "Warning", colors.HexColor("#f97316")
+    return "Healthy", colors.HexColor("#16a34a")
 
 
 def _demo_running() -> bool:
@@ -300,6 +321,309 @@ def _generate_recommendations(db: Session, days: int = 7) -> List[MaterialRecomm
         )
 
     return recommendations
+
+
+def _inventory_history_series(
+    db: Session, materials: List[Material], days: int = 7
+) -> Tuple[List[str], List[Tuple[str, List[Tuple[int, float]]]]]:
+    """Return aligned daily history series for the last *days* days (inclusive)."""
+    if not materials:
+        return [], []
+
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=max(days - 1, 0))
+    date_window = [
+        start_date + timedelta(days=offset) for offset in range((end_date - start_date).days + 1)
+    ]
+    labels = [date.strftime("%b %d") for date in date_window]
+    history_series: List[Tuple[str, List[Tuple[int, float]]]] = []
+
+    if not date_window:
+        return labels, history_series
+
+    start_dt = datetime.combine(date_window[0], datetime.min.time())
+    end_dt = datetime.combine(date_window[-1], datetime.max.time())
+
+    for material in materials:
+        records = (
+            db.query(MaterialInventoryHistory)
+            .filter(
+                MaterialInventoryHistory.material_id == material.id,
+                MaterialInventoryHistory.recorded_at >= start_dt,
+                MaterialInventoryHistory.recorded_at <= end_dt,
+            )
+            .order_by(MaterialInventoryHistory.recorded_at.asc())
+            .all()
+        )
+
+        daily_snapshot: dict = {}
+        for record in records:
+            snapshot_date = record.recorded_at.date()
+            if date_window[0] <= snapshot_date <= date_window[-1]:
+                daily_snapshot[snapshot_date] = float(record.weight)
+
+        points: List[Tuple[int, float]] = []
+        last_value: Optional[float] = None
+        for index, date in enumerate(date_window):
+            value = daily_snapshot.get(date)
+            if value is None:
+                value = last_value if last_value is not None else float(material.weight)
+            last_value = value
+            points.append((index, round(value, 2)))
+
+        history_series.append((material.type, points))
+
+    return labels, history_series
+
+
+def _build_inventory_report(
+    materials: List[Material],
+    recommendations: List[MaterialRecommendation],
+    history_labels: List[str],
+    history_series: List[Tuple[str, List[Tuple[int, float]]]],
+) -> BytesIO:
+    """Render a PDF snapshot with inventory tables, fill chart, trends, and recommendation outlook."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=0.75 * inch,
+        rightMargin=0.75 * inch,
+        topMargin=0.75 * inch,
+        bottomMargin=0.75 * inch,
+    )
+    styles = getSampleStyleSheet()
+    story = []
+
+    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    story.append(Paragraph("Raw Materials Inventory Report", styles["Title"]))
+    story.append(Paragraph(f"Generated on {generated_at}", styles["Normal"]))
+    story.append(Spacer(1, 0.3 * inch))
+
+    header_style = styles["Heading2"]
+    story.append(Paragraph("Inventory Levels", header_style))
+    story.append(Spacer(1, 0.1 * inch))
+
+    table_data = [["Material", "Weight (tons)", "Fill %", "Status"]]
+    fill_percentages: List[float] = []
+    fill_colors: List[colors.Color] = []
+    material_names: List[str] = []
+
+    for material in sorted(materials, key=lambda item: item.type.lower()):
+        metrics = _material_metrics(material)
+        fill_pct = round(metrics["fill_ratio"] * 100, 1)
+        status_label, status_color = _material_status(metrics["fill_ratio"])
+        table_data.append(
+            [
+                metrics["type"],
+                f"{metrics['weight']:.1f}",
+                f"{fill_pct:.1f}%",
+                status_label,
+            ]
+        )
+        material_names.append(metrics["type"])
+        fill_percentages.append(fill_pct)
+        fill_colors.append(status_color)
+
+    inventory_table = Table(
+        table_data,
+        colWidths=[2.2 * inch, 1.5 * inch, 1.3 * inch, 1.4 * inch],
+        repeatRows=1,
+    )
+    inventory_table_style = TableStyle(
+        [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e2e8f0")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("ALIGN", (1, 1), (2, -1), "RIGHT"),
+            ("ALIGN", (3, 1), (3, -1), "CENTER"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5f5")),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ]
+    )
+    for index, status_color in enumerate(fill_colors, start=1):
+        inventory_table_style.add("TEXTCOLOR", (-1, index), (-1, index), status_color)
+    inventory_table.setStyle(inventory_table_style)
+
+    story.append(inventory_table)
+    story.append(Spacer(1, 0.3 * inch))
+
+    if material_names:
+        story.append(Paragraph("Inventory Fill Chart", header_style))
+        story.append(Spacer(1, 0.1 * inch))
+        chart_width = 5.5 * inch
+        chart_height = 2.5 * inch
+        drawing = Drawing(chart_width, chart_height)
+        chart = VerticalBarChart()
+        chart.x = 40
+        chart.y = 30
+        chart.height = chart_height - 60
+        chart.width = chart_width - 60
+        chart.data = [fill_percentages]
+        chart.categoryAxis.categoryNames = material_names
+        chart.categoryAxis.labels.angle = 45
+        chart.categoryAxis.labels.boxAnchor = "ne"
+        chart.categoryAxis.labels.dx = -10
+        chart.categoryAxis.labels.dy = -20
+        chart.valueAxis.valueMin = 0
+        chart.valueAxis.valueMax = 100
+        chart.valueAxis.valueStep = 10
+        chart.barWidth = 12
+        chart.groupSpacing = 12
+        chart.strokeColor = colors.transparent
+        chart.valueAxis.visibleGrid = True
+        chart.valueAxis.gridStrokeColor = colors.HexColor("#cbd5f5")
+        chart.valueAxis.gridStrokeWidth = 0.5
+        for idx, bar_color in enumerate(fill_colors):
+            chart.bars[(0, idx)].fillColor = bar_color
+            chart.bars[(0, idx)].strokeWidth = 0
+        drawing.add(chart)
+        story.append(drawing)
+        story.append(Spacer(1, 0.3 * inch))
+
+    if history_series and history_labels:
+        story.append(Paragraph("Inventory Trend (Last 7 Days)", header_style))
+        story.append(Spacer(1, 0.1 * inch))
+        chart_width = 5.5 * inch
+        chart_height = 2.6 * inch
+        trend_drawing = Drawing(chart_width, chart_height)
+        line_plot = LinePlot()
+        line_plot.x = 50
+        line_plot.y = 40
+        line_plot.height = chart_height - 70
+        line_plot.width = chart_width - 90
+        line_plot.data = [series for _, series in history_series]
+        line_plot.xValueAxis.valueMin = 0
+        line_plot.xValueAxis.valueMax = max(
+            (point[0] for _, series in history_series for point in series), default=0
+        )
+        line_plot.xValueAxis.valueStep = 1
+        line_plot.xValueAxis.labels.fontSize = 8
+        line_plot.xValueAxis.labels.angle = 35
+        line_plot.xValueAxis.labels.boxAnchor = "ne"
+        line_plot.xValueAxis.labels.dy = -16
+        line_plot.xValueAxis.labels.dx = -12
+        line_plot.xValueAxis.labelTextFormat = lambda value: history_labels[int(value)] if 0 <= int(value) < len(history_labels) else ""
+
+        max_weight = max((point[1] for _, series in history_series for point in series), default=0.0)
+        if max_weight <= 0:
+            max_weight = 100.0
+        ceiling = max(50.0, math.ceil(max_weight / 50.0) * 50.0)
+        line_plot.yValueAxis.valueMin = 0
+        line_plot.yValueAxis.valueMax = ceiling
+        line_plot.yValueAxis.valueStep = max(100.0, ceiling / 5.0)
+        line_plot.yValueAxis.visibleGrid = True
+        line_plot.yValueAxis.gridStrokeColor = colors.HexColor("#e2e8f0")
+        line_plot.yValueAxis.gridStrokeWidth = 0.5
+        line_plot.yValueAxis.labels.fontSize = 8
+        line_plot.yValueAxis.labels.boxAnchor = "e"
+
+        palette = [
+            colors.HexColor("#2563eb"),
+            colors.HexColor("#16a34a"),
+            colors.HexColor("#f97316"),
+            colors.HexColor("#9333ea"),
+            colors.HexColor("#0ea5e9"),
+            colors.HexColor("#f59e0b"),
+            colors.HexColor("#ef4444"),
+        ]
+
+        for idx, _ in enumerate(history_series):
+            stroke_color = palette[idx % len(palette)]
+            line_plot.lines[idx].strokeColor = stroke_color
+            line_plot.lines[idx].strokeWidth = 1.4
+            marker = makeMarker("Circle")
+            marker.size = 3
+            marker.fillColor = stroke_color
+            marker.strokeColor = stroke_color
+            line_plot.lines[idx].symbol = marker
+
+        trend_drawing.add(line_plot)
+
+        legend = Legend()
+        legend.x = line_plot.x + line_plot.width + 10
+        legend.y = line_plot.y + line_plot.height - 20
+        legend.alignment = "left"
+        legend.fontSize = 7
+        legend.boxAnchor = "nw"
+        legend.columnMaximum = 3
+        legend.deltax = 65
+        legend.deltay = 6
+        legend.strokeWidth = 0
+        legend.colorNamePairs = [
+            (line_plot.lines[idx].strokeColor, history_series[idx][0])
+            for idx in range(len(history_series))
+        ]
+        trend_drawing.add(legend)
+
+        story.append(trend_drawing)
+        story.append(Spacer(1, 0.3 * inch))
+
+    if recommendations:
+        story.append(Paragraph("Recommended Ordering Outlook", header_style))
+        story.append(Spacer(1, 0.1 * inch))
+        rec_table_data = [
+            [
+                "Material",
+                "Avg Daily (t)",
+                "Days to Threshold",
+                "Order Date",
+                "Order Tons",
+                "Notes",
+            ]
+        ]
+        body_style = styles["BodyText"]
+        for rec in sorted(recommendations, key=lambda item: item.days_until_reorder or 999):
+            days_to_reorder = (
+                f"{rec.days_until_reorder:.1f}" if rec.days_until_reorder is not None else "—"
+            )
+            order_date = (
+                rec.recommended_order_date.strftime("%Y-%m-%d")
+                if rec.recommended_order_date
+                else "—"
+            )
+            order_tons = (
+                f"{rec.recommended_order_tons:.1f}" if rec.recommended_order_tons else "—"
+            )
+            avg_daily = f"{rec.average_daily_consumption:.1f}"
+            rec_table_data.append(
+                [
+                    rec.material_type,
+                    avg_daily,
+                    days_to_reorder,
+                    order_date,
+                    order_tons,
+                    Paragraph(rec.rationale, body_style),
+                ]
+            )
+
+        rec_table = Table(
+            rec_table_data,
+            colWidths=[1.6 * inch, 1.1 * inch, 1.2 * inch, 1.2 * inch, 1.1 * inch, 2.4 * inch],
+            repeatRows=1,
+        )
+        rec_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e2e8f0")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("ALIGN", (1, 1), (4, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5f5")),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ]
+            )
+        )
+        story.append(rec_table)
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 
 def _generate_recipe(materials: List[Material], min_percent: float) -> List[float]:
@@ -574,6 +898,24 @@ def get_alerts(db: Session = Depends(get_db)) -> List[MaterialAlert]:
 def get_recommendations(days: int = 7, db: Session = Depends(get_db)) -> List[MaterialRecommendation]:
     days = max(1, min(days, 30))
     return _generate_recommendations(db, days=days)
+
+
+@app.get("/api/report/inventory")
+def export_inventory_report(db: Session = Depends(get_db)) -> StreamingResponse:
+    """Stream a PDF report summarizing inventory levels and ordering outlook."""
+    materials = db.query(Material).order_by(Material.type.asc()).all()
+    recommendations = _generate_recommendations(db, days=7)
+    history_labels, history_series = _inventory_history_series(db, materials, days=7)
+    pdf_buffer = _build_inventory_report(materials, recommendations, history_labels, history_series)
+    headers = {
+        "Content-Disposition": "attachment; filename=inventory-report.pdf",
+        "Cache-Control": "no-store",
+    }
+    return StreamingResponse(
+        iter([pdf_buffer.getvalue()]),
+        media_type="application/pdf",
+        headers=headers,
+    )
 
 
 def _distribute_consumption(total: float, periods: int) -> List[float]:
@@ -878,6 +1220,7 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
 
 
 def _prepare_demo_delivery_queue() -> None:
+    """Prime the demo delivery queue with priority loads for key materials."""
     session = SessionLocal()
     try:
         materials = session.query(Material).all()

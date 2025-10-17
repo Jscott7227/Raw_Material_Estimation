@@ -93,13 +93,6 @@ body {
 
 .card-header { 
     padding: 15px; 
-    color: #4F5159; 
-    font-weight: 700; /* Roboto Bold */
-    text-align: center; 
-}
-
-.card-header { 
-    padding: 15px; 
     color: white; 
     font-weight: 700; /* Roboto Bold */
     text-align: center; 
@@ -128,12 +121,36 @@ body {
     color: #4F5159; 
 }
 
+.total-weight {
+    padding-bottom: 100px;
+}
+
 .card-subtitle {
     text-align: center;
     font-size: 1rem;
     color: #6b7280;
     margin-top: -10px;
     margin-bottom: 10px;
+}
+
+.card-indicator {
+    padding: 10px;
+    text-align: center;
+    font-weight: 500;
+    color: white;
+}
+
+.card-indicator.red {
+    background-color: #C0653F;
+}
+
+.card-indicator.yellow {
+    background-color: #E8B75D;
+    color: #4F5159;
+}
+
+.card-indicator.green {
+    background-color: #6B8E23;
 }
 
 .recommendations-panel {
@@ -254,22 +271,93 @@ body {
     }
 }
 
-.button { 
-    padding: 7px; 
-    text-align: center; 
-    font-size: 1em; 
-    font-weight: 500; 
-    border-radius: 8px;
-    border-width: 0px;
-    background: rgba(79, 81, 89, 0.2);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12); 
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0.35rem 0.7rem;
+    color: #374151;
+    background: linear-gradient(135deg, #f7f7f8 0%, #d1d5db 100%);
+    border: none;
+    border-radius: 20px;
+    box-shadow: 0 2px 4px rgba(79, 81, 89, 0.14), 0 1px 1px rgba(0, 0, 0, 0.04);
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    letter-spacing: 0.005em;
+    line-height: 1;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.button:hover {
+    transform: translateY(-0.5px);
+    box-shadow: 0 3px 8px rgba(79, 81, 89, 0.16);
+}
+
+.button:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(79, 81, 89, 0.12);
+}
+
+.button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.button-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 0.7rem;
+    height: 0.7rem;
+    font-size: 0.55rem;
+}
+
+.button-sm {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.66rem;
+    gap: 0.15rem;
+}
+
+.button-sm .button-icon {
+    width: 1.5rem;
+    height: 2rem;
+    font-size: 0.5rem;
+}
+
+.button-label {
+    font-size: 0.62rem;
+}
+
+.button-lg {
+    padding: 0.875rem 1.75rem;
+    gap: 0.625rem;
+}
+
+.button-lg.button-icon {
+    padding: 0.875rem;
+}
+
+.button:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
 }
 
 .button-row {
-    padding: 15px;
+    padding: 0;
     display: flex;
-    justify-content: flex-end;
-    gap: 10px
+    align-items: center;
+    gap: 6px;
+}
+
+.row {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .material-icons { 
@@ -292,6 +380,7 @@ body {
 .warning{ 
     background: rgb(249, 240, 157); 
     padding: 15px;
+    padding-left: 20px;
     font-size: 0.7em; 
     border-width: 3px;
     border-radius: 8px;
