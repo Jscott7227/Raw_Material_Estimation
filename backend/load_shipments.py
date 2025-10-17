@@ -20,8 +20,7 @@ from typing import Dict, Iterable, Optional, Sequence
 from sqlalchemy import func
 
 from database import SessionLocal, init_db
-from material import Material
-from truck_delivery import TruckDelivery
+from models import Material, TruckDelivery
 
 DATA_DIR = Path(__file__).parent / "data"
 DEFAULT_JSON = DATA_DIR / "shipments.json"

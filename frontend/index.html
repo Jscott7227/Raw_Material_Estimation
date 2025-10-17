@@ -18,47 +18,18 @@
     </div>
     
     <div class="content active">
-        <div class="warning" style="padding-left:20px" id="iconWarning">
+        <div class="warning" style="padding-left:20px" id="iconWarning" hidden>
             <div class="exclamation-icon"></div>
-            <div class="warning-body">Important: Materials C and F are below 10% capacity.</div>
+            <div class="warning-body" id="warningText"></div>
         </div>
         <div class="row">
             <div class="button-row" id="buttonRow" >
                 <button class="button" id="btnGenerateTotal">Generate Total Weight</button>
                 <button class="button" id="btnPDFExport">Export PDF</button>
             </div>
-            <div class="card-number" style="padding-bottom:100px">Total Weight: 3440 tons</div>
+            <div class="card-number" style="padding-bottom:100px" id="totalWeight">Total Weight: 0 tons</div>
         </div>
-        <div class="cards-grid">
-            <div class="card">
-                <div class="row">
-                    <div class="card-header green">Material A</div>
-                    <!-- <div class="circle-icon green"></div> -->
-                    <!-- <div class="card-indicator green">High Stock</div> -->
-                </div>
-                <div class="card-number">950 tons</div>
-            </div>
-            <div class="card">
-                <div class="card-header yellow">Material B</div>
-                <div class="card-number">450 tons</div>
-            </div>
-            <div class="card">
-                <div class="card-header red">Material C</div>
-                <div class="card-number">180 tons</div>
-            </div>
-            <div class="card">
-                <div class="card-header green">Material D</div>
-                <div class="card-number">1100 tons</div>
-            </div>
-            <div class="card">
-                <div class="card-header yellow">Material E</div>
-                <div class="card-number">520 tons</div>
-            </div>
-            <div class="card">
-                <div class="card-header red">Material F</div>
-                <div class="card-number">240 tons</div>
-            </div>
-        </div>
+        <div class="cards-grid" id="materialCards"></div>
     </div>
     <div class="content">
         <div class="filter-controls">
