@@ -14,6 +14,7 @@ let materialsData = [];
 let activeAlerts = [];
 let isPollingShipments = false;
 let recommendationsData = [];
+let uploadedFile = null;
 
 function formatTons(value) {
     const normalized = Number(value) || 0;
@@ -83,6 +84,8 @@ async function loadShipments() {
         renderMaterials();
         renderAlerts();
         renderRecommendations();
+        renderUsageRates();
+        populateMaterialDropdown();
 
         const materialMap = new Map(materialsData.map(material => [material.id, material.type]));
 
@@ -401,6 +404,260 @@ function filterStatus(status) {
     }
 }
 
+function renderUsageRates() {
+    const grid = document.getElementById('usageRatesGrid');
+    const warningBanner = document.getElementById('usageWarning');
+    const warningText = document.getElementById('usageWarningText');
+    const avgLabel = document.getElementById('avgUsage');
+
+    if (!grid) {
+        return;
+    }
+
+    grid.innerHTML = '';
+
+    if (!Array.isArray(materialsData) || materialsData.length === 0) {
+        if (avgLabel) {
+            avgLabel.textContent = 'Average Usage: -- lbs/min';
+        }
+        if (warningBanner) {
+            warningBanner.hidden = true;
+            warningBanner.style.display = 'none';
+        }
+        return;
+    }
+
+    let totalRate = 0;
+    const elevatedMaterials = [];
+
+    materialsData.forEach((material) => {
+        const baseRate = (Number(material.weight) || 0) * 0.0012;
+        const usageRate = Number((baseRate + Math.random() * 1.5 + 1).toFixed(1));
+        totalRate += usageRate;
+
+        const tone = usageRate < 2 ? 'green' : usageRate < 4 ? 'yellow' : 'red';
+        if (tone === 'red') {
+            elevatedMaterials.push(material.type);
+        }
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <div class="row">
+                <div class="card-header ${tone}">${material.type}</div>
+            </div>
+            <div class="card-number">${usageRate.toFixed(1)} lbs/min</div>
+        `;
+        grid.appendChild(card);
+    });
+
+    if (avgLabel) {
+        const averageRate = totalRate / materialsData.length;
+        avgLabel.textContent = `Average Usage: ${averageRate.toFixed(1)} lbs/min`;
+    }
+
+    if (warningBanner && warningText) {
+        if (elevatedMaterials.length) {
+            warningText.textContent = `Notice: ${elevatedMaterials.join(', ')} showing elevated usage rates.`;
+            warningBanner.hidden = false;
+            warningBanner.style.display = 'flex';
+        } else {
+            warningBanner.hidden = true;
+            warningBanner.style.display = 'none';
+        }
+    }
+}
+
+function populateMaterialDropdown() {
+    const select = document.getElementById('materialSelect');
+    const selectionBlock = document.getElementById('materialSelection');
+    if (!select || !selectionBlock) {
+        return;
+    }
+
+    select.innerHTML = '<option value="">Select a material...</option>';
+
+    if (Array.isArray(materialsData) && materialsData.length > 0) {
+        materialsData.forEach((material) => {
+            const option = document.createElement('option');
+            option.value = material.type;
+            option.textContent = material.type;
+            select.appendChild(option);
+        });
+        selectionBlock.hidden = false;
+    } else {
+        selectionBlock.hidden = true;
+    }
+
+    checkSubmitButton();
+}
+
+function handleImageUpload(event) {
+    const files = event.target.files || event.dataTransfer?.files;
+    if (!files || files.length === 0) {
+        return;
+    }
+
+    uploadedFile = files[0];
+    const uploadArea = document.getElementById('uploadArea');
+    if (uploadedFile && uploadArea) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            uploadArea.innerHTML = `<img src="${e.target.result}" alt="Selected image" style="max-width: 100%; max-height: 220px; border-radius: 12px;">`;
+        };
+        reader.readAsDataURL(uploadedFile);
+    }
+
+    const selectionBlock = document.getElementById('materialSelection');
+    if (selectionBlock) {
+        selectionBlock.hidden = false;
+    }
+
+    checkSubmitButton();
+}
+
+function checkSubmitButton() {
+    const analyzeButton = document.getElementById('btnAnalyzeImage');
+    const materialSelect = document.getElementById('materialSelect');
+    const densityInput = document.getElementById('densityInput');
+
+    if (!analyzeButton) {
+        return;
+    }
+
+    const hasImage = uploadedFile !== null;
+    const hasMaterial = !!(materialSelect && materialSelect.value);
+    const hasDensity = densityInput && densityInput.value && Number(densityInput.value) > 0;
+
+    analyzeButton.disabled = !(hasImage && hasMaterial && hasDensity);
+}
+
+async function analyzeImage() {
+    const analyzeButton = document.getElementById('btnAnalyzeImage');
+    if (!analyzeButton || analyzeButton.disabled || !uploadedFile) {
+        return;
+    }
+
+    const uploadSection = document.getElementById('uploadSection');
+    const loadingSection = document.getElementById('loadingSection');
+    const analysisSection = document.getElementById('analysisSection');
+    const newImageSection = document.getElementById('newImageSection');
+    const resultNumber = document.getElementById('resultNumber');
+    const resultDetails = document.getElementById('resultDetails');
+    const materialSelect = document.getElementById('materialSelect');
+    const densityInput = document.getElementById('densityInput');
+
+    const densityValue = densityInput ? parseFloat(densityInput.value) : NaN;
+    if (!densityValue || Number.isNaN(densityValue)) {
+        alert('Please enter a valid density value.');
+        return;
+    }
+
+    analyzeButton.disabled = true;
+    if (materialSelect) {
+        materialSelect.disabled = true;
+    }
+    if (densityInput) {
+        densityInput.disabled = true;
+    }
+
+    if (uploadSection) {
+        uploadSection.style.display = 'none';
+    }
+    if (loadingSection) {
+        loadingSection.hidden = false;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('file', uploadedFile);
+        formData.append('density', densityValue.toString());
+
+        const response = await fetch('http://localhost:8000/api/weight', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error(`Analysis failed (${response.status})`);
+        }
+
+        const massHeader = response.headers.get('X-Mass-Short-Ton');
+        const blob = await response.blob();
+        const overlayUrl = URL.createObjectURL(blob);
+
+        const uploadedImage = document.getElementById('uploadedImage');
+        if (uploadedImage) {
+            uploadedImage.src = overlayUrl;
+        }
+
+        if (resultNumber) {
+            resultNumber.textContent = massHeader ? `${Number(massHeader).toFixed(2)} tons` : '-- tons';
+        }
+        if (resultDetails) {
+            resultDetails.textContent = 'Estimated short tons from uploaded image.';
+        }
+    } catch (error) {
+        console.error('Failed to analyze image:', error);
+        if (resultNumber) {
+            resultNumber.textContent = '--';
+        }
+        if (resultDetails) {
+            resultDetails.textContent = 'Unable to analyze image. Please try again.';
+        }
+    } finally {
+        if (loadingSection) {
+            loadingSection.hidden = true;
+        }
+        if (analysisSection) {
+            analysisSection.style.display = 'flex';
+        }
+        if (newImageSection) {
+            newImageSection.style.display = 'block';
+        }
+        analyzeButton.disabled = false;
+    }
+}
+
+function resetImageUpload() {
+    uploadedFile = null;
+    const uploadSection = document.getElementById('uploadSection');
+    const analysisSection = document.getElementById('analysisSection');
+    const newImageSection = document.getElementById('newImageSection');
+    const materialSelect = document.getElementById('materialSelect');
+    const densityInput = document.getElementById('densityInput');
+    const imageUpload = document.getElementById('imageUpload');
+    const uploadArea = document.getElementById('uploadArea');
+
+    if (imageUpload) {
+        imageUpload.value = '';
+    }
+    if (uploadArea) {
+        uploadArea.innerHTML = `
+            <div class="upload-text">Click to upload image or drag and drop</div>
+            <div class="upload-subtext">Supported formats: JPG, PNG, GIF</div>
+        `;
+    }
+    if (uploadSection) {
+        uploadSection.style.display = 'block';
+    }
+    if (analysisSection) {
+        analysisSection.style.display = 'none';
+    }
+    if (newImageSection) {
+        newImageSection.style.display = 'none';
+    }
+    if (materialSelect) {
+        materialSelect.disabled = false;
+        materialSelect.value = '';
+    }
+    if (densityInput) {
+        densityInput.disabled = false;
+        densityInput.value = '';
+    }
+    checkSubmitButton();
+}
+
 async function exportInventoryReport() {
     const button = document.getElementById('btnPDFExport');
     if (!button) {
@@ -438,7 +695,30 @@ async function exportInventoryReport() {
 }
 window.addEventListener('load', () => {
     document.getElementById('btnPDFExport')?.addEventListener('click', exportInventoryReport);
-    
+    document.getElementById('btnUsagePDFExport')?.addEventListener('click', exportInventoryReport);
+    document.getElementById('btnGenerateUsageReport')?.addEventListener('click', renderUsageRates);
+    document.getElementById('btnAnalyzeImage')?.addEventListener('click', analyzeImage);
+    document.getElementById('btnNewImage')?.addEventListener('click', resetImageUpload);
+    document.getElementById('materialSelect')?.addEventListener('change', checkSubmitButton);
+    document.getElementById('densityInput')?.addEventListener('input', checkSubmitButton);
+    const imageUpload = document.getElementById('imageUpload');
+    imageUpload?.addEventListener('change', handleImageUpload);
+    const uploadArea = document.getElementById('uploadArea');
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (event) => {
+            event.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleImageUpload(event);
+        });
+    }
+
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => showTab(parseInt(tab.dataset.tabIndex)));
     });
@@ -470,4 +750,7 @@ window.addEventListener('load', () => {
 
     loadShipments();
     setInterval(loadShipments, 15000);
+    renderUsageRates();
+    populateMaterialDropdown();
+    checkSubmitButton();
 });

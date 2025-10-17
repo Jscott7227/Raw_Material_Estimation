@@ -8,13 +8,17 @@
 </head>
 <body>
     <div class="hero">
-        <h1>Raw Materials Dashboard</h1>
-        <div class="subtitle">Portobello America - Innovative Tile Solutions</div>
+        <img src="images/Portobello_Logo_White.png" alt="Portobello America Logo" class="hero-logo">
+        <div class="hero-center">
+            <h1>Raw Materials Dashboard</h1>
+        </div>
     </div>
     
     <div class="tabs">
         <div class="tab active" data-tab-index="0">Raw Weight</div>
         <div class="tab" data-tab-index="1">Truck Data</div>
+        <div class="tab" data-tab-index="2">Usage Rates</div>
+        <div class="tab" data-tab-index="3">Weight Est.</div>
     </div>
     
     <div class="content active">
@@ -74,6 +78,78 @@
             <tbody id="truckTableBody">
             </tbody>
         </table>
+    </div>
+    <div class="content">
+        <div class="warning" id="usageWarning" hidden>
+            <div class="exclamation-icon"></div>
+            <div class="warning-body" id="usageWarningText"></div>
+        </div>
+        <div class="row">
+            <div class="button-row" id="usageButtonRow">
+                <button class="button button-sm" id="btnGenerateUsageReport">
+                    <span class="button-icon" aria-hidden="true">📊</span>
+                    <span class="button-label">Refresh Usage</span>
+                </button>
+                <button class="button button-sm" id="btnUsagePDFExport">
+                    <span class="button-icon" aria-hidden="true">📄</span>
+                    <span class="button-label">Export PDF</span>
+                </button>
+            </div>
+            <div class="card-number secondary-total" id="avgUsage">Average Usage: -- lbs/min</div>
+        </div>
+        <div class="cards-grid" id="usageRatesGrid"></div>
+    </div>
+    <div class="content">
+        <div class="weight-estimation-container">
+            <h2>Material Weight Estimation</h2>
+            <div class="material-selection" id="materialSelection" hidden>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label for="materialSelect">Material Type</label>
+                        <select id="materialSelect">
+                            <option value="">Loading materials...</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="densityInput">Density (kg/m³)</label>
+                        <input type="number" id="densityInput" min="0" step="0.01" placeholder="e.g. 2650">
+                    </div>
+                </div>
+            </div>
+            <div class="upload-section" id="uploadSection">
+                <label for="imageUpload" class="upload-label">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-text">Click to upload image or drag and drop</div>
+                        <div class="upload-subtext">Supported formats: JPG, PNG, GIF</div>
+                    </div>
+                </label>
+                <input type="file" id="imageUpload" accept="image/*" hidden>
+            </div>
+            <div class="submit-section">
+                <button class="button button-sm" id="btnAnalyzeImage" disabled>
+                    <span class="button-label">Analyze Image</span>
+                </button>
+            </div>
+            <div class="loading-section" id="loadingSection" hidden>
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Analyzing image…</div>
+            </div>
+            <div class="analysis-section" id="analysisSection" style="display: none;">
+                <div class="image-display">
+                    <img id="uploadedImage" src="" alt="Uploaded material" />
+                </div>
+                <div class="estimation-result">
+                    <h3>Estimated Weight</h3>
+                    <div class="result-number" id="resultNumber">-- tons</div>
+                    <div class="result-details" id="resultDetails">Upload an image to begin</div>
+                </div>
+            </div>
+            <div class="new-image-section" id="newImageSection" style="display: none;">
+                <button class="button button-sm" id="btnNewImage">
+                    <span class="button-label">Upload Another Image</span>
+                </button>
+            </div>
+        </div>
     </div>
     
     <script src="app.js"></script>
