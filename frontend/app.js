@@ -9,6 +9,22 @@ function showTab(index) {
 
 let shipmentsData = [];
 let defaultShipmentDateBounds = { min: null, max: null };
+let materialsData = [];
+
+function formatTons(value) {
+    const normalized = Number(value) || 0;
+    return `${normalized.toLocaleString()} tons`;
+}
+
+function classifyMaterial(weight) {
+    if (weight >= 800) {
+        return { label: 'High Stock', tone: 'green' };
+    }
+    if (weight >= 400) {
+        return { label: 'Moderate Stock', tone: 'yellow' };
+    }
+    return { label: 'Low Stock', tone: 'red' };
+}
 
 function getCurrentDate() {
     const today = new Date();
@@ -37,17 +53,28 @@ function setDateInputs(start, end) {
 
 async function loadShipments() {
     try {
-        const [deliveriesResponse, materialsResponse] = await Promise.all([
-            fetch('http://localhost:8000/api/deliveries'),
-            fetch('http://localhost:8000/api/materials')
-        ]);
-
+        const deliveriesResponse = await fetch('http://localhost:8000/api/deliveries');
         if (!deliveriesResponse.ok) {
             throw new Error(`Failed to load deliveries: ${deliveriesResponse.status}`);
         }
 
         const deliveries = await deliveriesResponse.json();
-        const materials = materialsResponse.ok ? await materialsResponse.json() : [];
+
+        let materials = [];
+        try {
+            const materialsResponse = await fetch('http://localhost:8000/api/materials');
+            if (materialsResponse.ok) {
+                materials = await materialsResponse.json();
+            } else {
+                console.warn('Materials request failed:', materialsResponse.status);
+            }
+        } catch (materialError) {
+            console.warn('Unable to fetch materials:', materialError);
+        }
+
+        materialsData = materials;
+        renderMaterials();
+
         const materialMap = new Map(materials.map(material => [material.id, material.type]));
 
         shipmentsData = deliveries.map(delivery => {
@@ -84,6 +111,8 @@ async function loadShipments() {
         defaultShipmentDateBounds = { min: today, max: today };
         setDateInputs(today, today);
         renderShipments();
+        materialsData = [];
+        renderMaterials();
     }
 }
 
@@ -173,6 +202,62 @@ function updateDateRange() {
     renderShipments();
 }
 
+function renderMaterials() {
+    const cardsContainer = document.getElementById('materialCards');
+    const totalWeightLabel = document.getElementById('totalWeight');
+    const warningBanner = document.getElementById('iconWarning');
+    const warningText = document.getElementById('warningText');
+
+    if (!cardsContainer || !totalWeightLabel) {
+        return;
+    }
+
+    cardsContainer.innerHTML = '';
+
+    if (!Array.isArray(materialsData) || materialsData.length === 0) {
+        totalWeightLabel.textContent = 'Total Weight: 0 tons';
+        if (warningBanner) {
+            warningBanner.hidden = true;
+        }
+        return;
+    }
+
+    const lowStockMaterials = [];
+    let runningTotal = 0;
+
+    materialsData.forEach((material) => {
+        const weight = Number(material.weight) || 0;
+        runningTotal += weight;
+
+        const { label, tone } = classifyMaterial(weight);
+        if (tone === 'red') {
+            lowStockMaterials.push(material.type);
+        }
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <div class="row">
+                <div class="card-header ${tone}">${material.type}</div>
+            </div>
+            <div class="card-number">${formatTons(weight)}</div>
+            <div class="card-indicator ${tone}">${label}</div>
+        `;
+        cardsContainer.appendChild(card);
+    });
+
+    totalWeightLabel.textContent = `Total Weight: ${runningTotal.toLocaleString()} tons`;
+
+    if (warningBanner && warningText) {
+        if (lowStockMaterials.length > 0) {
+            warningText.textContent = `Important: ${lowStockMaterials.join(', ')} ${lowStockMaterials.length === 1 ? 'is' : 'are'} below safe capacity.`;
+            warningBanner.hidden = false;
+        } else {
+            warningBanner.hidden = true;
+        }
+    }
+}
+
 // Close date picker when clicking outside
 document.addEventListener('click', function(event) {
     const datePicker = document.getElementById('datePicker');
@@ -253,4 +338,10 @@ function filterStatus(status) {
     }
 }
 
-window.onload = loadShipments;
+window.addEventListener('load', () => {
+    document.getElementById('btnGenerateTotal')?.addEventListener('click', renderMaterials);
+    document.getElementById('btnPDFExport')?.addEventListener('click', () => {
+        console.log('PDF export requested. Implement export pipeline here.');
+    });
+    loadShipments();
+});
