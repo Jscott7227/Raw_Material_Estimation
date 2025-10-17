@@ -28,16 +28,6 @@ def init_test_delivery():
         db.close()
         return
 
-    # Example test delivery
-    test_delivery = TruckDelivery(
-        delivery_num="TRK-TEST-001",
-        incoming_weight=1000,
-        material_id = 1,
-        delivery_time=datetime.utcnow(),
-        status="pending"
-    )
-
-    db.add(test_delivery)
     db.commit()
     db.close()
 

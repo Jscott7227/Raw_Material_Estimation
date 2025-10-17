@@ -12,7 +12,10 @@ let defaultShipmentDateBounds = { min: null, max: null };
 
 function getCurrentDate() {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 function setDateInputs(start, end) {
@@ -52,8 +55,8 @@ async function loadShipments() {
             return {
                 deliveryNumber: delivery.delivery_num,
                 material: materialMap.get(delivery.material_id) || `Material ${delivery.material_id}`,
-                incomingWeight: Number(delivery.incoming_weight) || 0,
-                materialWeight: Number(delivery.material_weight ?? delivery.incoming_weight) || 0,
+                expectedWeight: Number(delivery.expected_weight || delivery.incoming_weight) || 0,
+                actualWeight: Number(delivery.actual_weight || delivery.material_weight) || 0,
                 deliveryDateTime,
                 status: delivery.status || 'pending'
             };
@@ -67,12 +70,11 @@ async function loadShipments() {
 
             defaultShipmentDateBounds.min = shipmentDates[0];
             defaultShipmentDateBounds.max = shipmentDates[shipmentDates.length - 1];
-            setDateInputs(defaultShipmentDateBounds.min, defaultShipmentDateBounds.max);
-        } else {
-            const today = getCurrentDate();
-            defaultShipmentDateBounds = { min: today, max: today };
-            setDateInputs(today, today);
         }
+        
+        // Always default to current day
+        const today = getCurrentDate();
+        setDateInputs(today, today);
 
         renderShipments();
     } catch (error) {
@@ -110,8 +112,8 @@ function renderShipments() {
         row.innerHTML = `
             <td>${shipment.deliveryNumber}</td>
             <td>${shipment.material}</td>
-            <td>${shipment.incomingWeight.toLocaleString()} lbs</td>
-            <td>${shipment.materialWeight} stn</td>
+            <td>${shipment.expectedWeight.toLocaleString()} lbs</td>
+            <td>${shipment.actualWeight.toLocaleString()} lbs</td>
             <td>${shipment.deliveryDateTime}</td>
             <td><span class="status-${shipment.status} status-clickable" onclick="toggleStatus(${shipment.originalIndex})">${shipment.status.charAt(0).toUpperCase() + shipment.status.slice(1)}</span></td>
         `;
@@ -190,12 +192,12 @@ function setToday() {
 
 function setWeek() {
     const today = new Date();
-    const startOfWeek = new Date(today);
-    const endOfWeek = new Date(today);
-    endOfWeek.setDate(today.getDate() + 6);
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + 6);
     
-    const start = startOfWeek.toISOString().split('T')[0];
-    const end = endOfWeek.toISOString().split('T')[0];
+    const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+    
     setDateInputs(start, end);
     renderShipments();
 }
