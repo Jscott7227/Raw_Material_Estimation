@@ -328,6 +328,7 @@ async function renderCards(material) {
     const response = await fetch('../backend/data/currMaterialWeight.json'); 
     const currentWeight = await response.json(); 
     let total = 0;
+    let redList = [];
     const arrMaterialType = [ 
         {id:'SS2',cardName:'SS2CurrTonne'}, 
         {id:'TNStone', cardName:'TNStoneCurrTonne'}, 
@@ -335,45 +336,65 @@ async function renderCards(material) {
         {id:'LR28', cardName:'intLR28MCurrTonne'}, 
         {id:'Minispar', cardName:'intMinsparCurrTonne'}, 
         {id:'Sandspar', cardName:'intSandsparCurrTonne'}, 
-        { id:'Feldspar', cardName:'intFeldsparCurrTonne'} ] 
+        {id:'Feldspar', cardName:'intFeldsparCurrTonne'} ] 
 
-        arrMaterialType.forEach(item => { 
-            const weightObj = currentWeight.find(w => w.type === item.id); 
-            if (weightObj) {
-                let weightInStones = weightObj.weight;
-                if(weightObj.metric == 'kg'){
-                    weightInStones = weightObj.weight/6.35029;
-                }
+    arrMaterialType.forEach(item => { 
+        const weightObj = currentWeight.find(w => w.type === item.id); 
+        if (weightObj) {
+            let weightInStones = weightObj.weight;
+            if(weightObj.metric == 'kg'){
+                weightInStones = weightObj.weight/6.35029;
+            }
 
-                const headerName = item.cardName.replace('CurrTonne', '') + 'Header';
-                //display each weight
-                document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
-                //display header colors
-                const { label, tone } = classifyMaterial(weightInStones);
-                console.log(item.cardName, headerName, tone);
-                document.getElementById(headerName).classList.add(tone);
-                //calc total weight
-                total += weightInStones;
+            const headerName = item.cardName.replace('CurrTonne', '') + 'Header';
+            //display each weight
+            document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
+            //display header colors
+            const { critical, tone } = classifyMaterial(weightInStones);
+            if (critical) {
+                if(item.id == "SS2"){
+                    redList.push("Super Strength 2");
+                } else {redList.push(item.id)}
+            }
+            console.log(`${redList}`);
 
-            } 
-        }); 
+            document.getElementById(headerName).classList.add(tone);
 
-        //display weight totals
-        document.getElementById('txtTotalWeight').innerHTML = `Total Weight: ${total.toFixed(0)} st`; 
+            //calc total weight
+            total += weightInStones;
+        } 
+    },);
+
+    renderWarningMSG(redList);
+    //display weight totals
+    document.getElementById('txtTotalWeight').innerHTML = `Total Weight: ${total.toFixed(0)} st`; 
 
 }
 
 function classifyMaterial(weight) {
     max = 900;
     if (weight >= max*0.75) {
-        return { label: 'High Stock', tone: 'green' };
+        return { critical: false, tone: 'green' };
     }
     else if (weight >= max*0.25) {
-        return { label: 'Moderate Stock', tone: 'yellow' };
+        return { critical: false, tone: 'yellow' };
     }
-    else return { label: 'Low Stock', tone: 'red' };
-    
+    else if (weight <= max*0.1){
+        return { critical: true, tone: 'red' };
+    }
+    else return { critical: false, tone: 'red' };
+}
 
+function renderWarningMSG(list) {
+    const warningBanner = document.getElementById('cardWarning');
+    const warningText = document.getElementById('txtWarningMsg');
+
+    if (list.length > 0) {
+        warningText.textContent = `Important: ${list.join(' & ')} ${list.length === 1 ? 'is' : 'are'} near critical capacity (below 10%).`;
+        warningBanner.hidden = false;
+    } else {
+        warningBanner.hidden = true;
+    }
 }
 
 
