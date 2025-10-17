@@ -34,17 +34,25 @@ function setDateInputs(start, end) {
 
 async function loadShipments() {
     try {
-        const [deliveriesResponse, materialsResponse] = await Promise.all([
-            fetch('http://localhost:8000/api/deliveries'),
-            fetch('http://localhost:8000/api/materials')
-        ]);
-
+        const deliveriesResponse = await fetch('http://localhost:8000/api/deliveries');
         if (!deliveriesResponse.ok) {
             throw new Error(`Failed to load deliveries: ${deliveriesResponse.status}`);
         }
 
         const deliveries = await deliveriesResponse.json();
-        const materials = materialsResponse.ok ? await materialsResponse.json() : [];
+
+        let materials = [];
+        try {
+            const materialsResponse = await fetch('http://localhost:8000/api/materials');
+            if (materialsResponse.ok) {
+                materials = await materialsResponse.json();
+            } else {
+                console.warn('Materials request failed:', materialsResponse.status);
+            }
+        } catch (materialError) {
+            console.warn('Unable to fetch materials:', materialError);
+        }
+
         const materialMap = new Map(materials.map(material => [material.id, material.type]));
 
         shipmentsData = deliveries.map(delivery => {
