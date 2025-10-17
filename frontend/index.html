@@ -127,7 +127,7 @@
     <div class="content">
         <div class="weight-estimation-container">
             <h2>Material Weight Estimation</h2>
-            <div class="material-selection" id="materialSelection">
+            <div class="material-selection" id="materialSelection" style="display: none;">
                 <div class="input-row">
                     <div class="input-group">
                         <label for="materialSelect">Select Material Type:</label>
@@ -136,7 +136,7 @@
                         </select>
                     </div>
                     <div class="input-group">
-                        <label for="densityInput">Density (g/cm³):</label>
+                        <label for="densityInput">Density (kg/m³):</label>
                         <input type="number" id="densityInput" step="0.01" min="0" placeholder="e.g. 2.65">
                     </div>
                 </div>
@@ -149,9 +149,6 @@
                     </div>
                 </label>
                 <input type="file" id="imageUpload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
-                <div class="submit-section">
-                    <button class="button" id="btnAnalyzeImage" onclick="analyzeImage()" disabled>Analyze Image</button>
-                </div>
             </div>
             <div class="analysis-section" id="analysisSection" style="display: none;">
                 <div class="image-display">
@@ -162,10 +159,6 @@
                     <div class="result-number" id="resultNumber">0 tons</div>
                     <div class="result-details" id="resultDetails">Analysis complete</div>
                 </div>
-            </div>
-            <div class="loading-section" id="loadingSection" style="display: none;">
-                <div class="loading-spinner"></div>
-                <div class="loading-text">Analyzing image...</div>
             </div>
             <div class="new-image-section" id="newImageSection" style="display: none;">
                 <button class="button" id="btnNewImage" onclick="resetImageUpload()">New Image</button>
