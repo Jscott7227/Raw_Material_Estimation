@@ -2,7 +2,7 @@
   { "type": "SS2", "weight": 840, "metric": "st" },
   { "type": "TNStone", "weight": 720, "metric": "st" },
   { "type": "LR28", "weight": 480, "metric": "st" },
-  { "type": "Minispar", "weight": 350, "metric": "st" },
+  { "type": "Minispar", "weight": 900, "metric": "st" },
   { "type": "Sandspar", "weight": 420, "metric": "kg" },
   { "type": "SMSClay", "weight": 420, "metric": "st" },
   { "type": "Feldspar", "weight": 400, "metric": "st" }

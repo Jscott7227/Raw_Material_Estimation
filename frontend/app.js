@@ -16,17 +16,6 @@ function formatTons(value) {
     return `${normalized.toLocaleString()} tons`;
 }
 
-// function classifyMaterial(weight) {
-//     if (weight >= 800) {
-//         return { label: 'High Stock', tone: 'green' };
-//     }
-//     if (weight >= 400) {
-//         return { label: 'Moderate Stock', tone: 'yellow' };
-//     }
-//     return { label: 'Low Stock', tone: 'red' };
-
-// }
-
 function getCurrentDate() {
     const today = new Date();
     const year = today.getFullYear();
@@ -75,6 +64,8 @@ async function loadShipments() {
 
         materialsData = materials;
         renderMaterials();
+        console.log('renderMaterials() in loadShipments try function has run');
+
 
         const materialMap = new Map(materials.map(material => [material.id, material.type]));
 
@@ -114,6 +105,7 @@ async function loadShipments() {
         renderShipments();
         materialsData = [];
         renderMaterials();
+        console.log('renderMaterials() in loadShipments catch has run');
     }
 }
 
@@ -203,9 +195,10 @@ function updateDateRange() {
     renderShipments();
 }
 
+//DOES NOTHING - CHECK WITH BROCK BF PUSHING TO MAKE SURE HE'S NOT USING THIS
 function renderMaterials() {
-    const cardsContainer = document.getElementById('materialCards');
-    const warningBanner = document.getElementById('cardWarning');
+    const cardsContainer = document.getElementById('card');
+    const warningBanner = document.getElementById('warning');
     const warningText = document.getElementById('txtWarningMsg');
 
     if (!cardsContainer) {
@@ -225,15 +218,17 @@ function renderMaterials() {
 
     materialsData.forEach((material) => {
         const weight = Number(material.weight) || 0;
-        runningTotal += weight;
 
         const { label, tone } = classifyMaterial(weight);
         // implememnt isSuperLow()
         if (tone === 'red') {
             lowStockMaterials.push(material.type);
+            console.log('in if statement');
         }
 
         console.log(`${lowStockMaterials}`);
+
+        console.log(`${material.type} → tone: ${tone}`);
 
 
         const card = document.createElement('div');
@@ -247,15 +242,6 @@ function renderMaterials() {
         `;
         cardsContainer.appendChild(card);
     });
-
-    if (warningBanner && warningText) {
-        if (lowStockMaterials.length > 0) {
-            warningText.textContent = `Important: ${lowStockMaterials.join(', ')} ${lowStockMaterials.length === 1 ? 'is' : 'are'} below safe capacity.`;
-            warningBanner.hidden = false;
-        } else {
-            warningBanner.hidden = true;
-        }
-    }
 }
 
 // Close date picker when clicking outside
@@ -338,15 +324,15 @@ function filterStatus(status) {
     }
 }
 
-async function getAllWeights(material) { 
+async function renderCards(material) { 
     const response = await fetch('../backend/data/currMaterialWeight.json'); 
-    currentWeight = await response.json(); 
+    const currentWeight = await response.json(); 
     let total = 0;
     const arrMaterialType = [ 
         {id:'SS2',cardName:'SS2CurrTonne'}, 
         {id:'TNStone', cardName:'TNStoneCurrTonne'}, 
         {id:'SMSClay', cardName:'intSMSClayCurrTonne'}, 
-        {id:'LR28', cardName:'intLR28MWeightCurrTonne'}, 
+        {id:'LR28', cardName:'intLR28MCurrTonne'}, 
         {id:'Minispar', cardName:'intMinsparCurrTonne'}, 
         {id:'Sandspar', cardName:'intSandsparCurrTonne'}, 
         { id:'Feldspar', cardName:'intFeldsparCurrTonne'} ] 
@@ -355,21 +341,43 @@ async function getAllWeights(material) {
             const weightObj = currentWeight.find(w => w.type === item.id); 
             if (weightObj) {
                 let weightInStones = weightObj.weight;
-
-                document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
                 if(weightObj.metric == 'kg'){
                     weightInStones = weightObj.weight/6.35029;
                 }
+
+                const headerName = item.cardName.replace('CurrTonne', '') + 'Header';
+                //display each weight
+                document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
+                //display header colors
+                const { label, tone } = classifyMaterial(weightInStones);
+                console.log(item.cardName, headerName, tone);
+                document.getElementById(headerName).classList.add(tone);
+                //calc total weight
                 total += weightInStones;
-                console.log(item.id, weightInStones, total);
+
             } 
         }); 
 
+        //display weight totals
         document.getElementById('txtTotalWeight').innerHTML = `Total Weight: ${total.toFixed(0)} st`; 
+
+}
+
+function classifyMaterial(weight) {
+    max = 900;
+    if (weight >= max*0.75) {
+        return { label: 'High Stock', tone: 'green' };
+    }
+    else if (weight >= max*0.25) {
+        return { label: 'Moderate Stock', tone: 'yellow' };
+    }
+    else return { label: 'Low Stock', tone: 'red' };
+    
+
 }
 
 
 window.addEventListener('load', () => {
     loadShipments();
-    getAllWeights();
+    renderCards();
 });
