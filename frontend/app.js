@@ -465,9 +465,7 @@ function checkSubmitButton() {
 
     const hasImage = uploadedFile !== null;
     const hasMaterial = !!(materialSelect && materialSelect.value);
-    const hasDensity = densityInput && densityInput.value && Number(densityInput.value) > 0;
-
-    analyzeButton.disabled = !(hasImage && hasMaterial && hasDensity);
+    analyzeButton.disabled = !(hasImage && hasMaterial);
 }
 
 async function analyzeImage() {
@@ -485,19 +483,13 @@ async function analyzeImage() {
     const materialSelect = document.getElementById('materialSelect');
     const densityInput = document.getElementById('densityInput');
 
-    const densityValue = densityInput ? parseFloat(densityInput.value) : NaN;
-    if (!densityValue || Number.isNaN(densityValue)) {
-        alert('Please enter a valid density value.');
-        return;
-    }
+
 
     analyzeButton.disabled = true;
     if (materialSelect) {
         materialSelect.disabled = true;
     }
-    if (densityInput) {
-        densityInput.disabled = true;
-    }
+
 
     if (uploadSection) {
         uploadSection.style.display = 'none';
@@ -509,7 +501,7 @@ async function analyzeImage() {
     try {
         const formData = new FormData();
         formData.append('file', uploadedFile);
-        formData.append('density', densityValue.toString());
+        formData.append('material', materialSelect.value);
 
         const response = await fetch('http://localhost:8000/api/weight', {
             method: 'POST',
@@ -552,9 +544,7 @@ async function analyzeImage() {
         if (materialSelect) {
             materialSelect.disabled = false;
         }
-        if (densityInput) {
-            densityInput.disabled = false;
-        }
+
     }
 }
 
@@ -591,10 +581,7 @@ function resetImageUpload() {
         materialSelect.disabled = false;
         materialSelect.value = '';
     }
-    if (densityInput) {
-        densityInput.disabled = false;
-        densityInput.value = '';
-    }
+
     checkSubmitButton();
 }
 
@@ -639,7 +626,7 @@ window.addEventListener('load', () => {
     document.getElementById('btnAnalyzeImage')?.addEventListener('click', analyzeImage);
     document.getElementById('btnNewImage')?.addEventListener('click', resetImageUpload);
     document.getElementById('materialSelect')?.addEventListener('change', checkSubmitButton);
-    document.getElementById('densityInput')?.addEventListener('input', checkSubmitButton);
+
     const imageUpload = document.getElementById('imageUpload');
     imageUpload?.addEventListener('change', handleImageUpload);
     const uploadArea = document.getElementById('uploadArea');

@@ -1474,8 +1474,24 @@ def import_bill_of_lading(
     return delivery
 
 
+MATERIAL_DENSITIES = {
+    "super strength 2": 9.2,
+    "tn stone": 10.2,
+    "sms clay": 11.8,
+    "feldspar": 9.8,
+    "sandspar": 8.8,
+    "minspar": 12.4,
+    "lr28": 11.2,
+}
+
 @app.post("/api/weight")
-async def estimate_image_weight(file: UploadFile = File(...), density: float = Form(...)):
+async def estimate_image_weight(file: UploadFile = File(...), material: str = Form(...)):
+    material_key = material.lower().strip()
+    if material_key not in MATERIAL_DENSITIES:
+        raise HTTPException(status_code=400, detail=f"Unknown material: {material}")
+    
+    density_lbs_per_gal = MATERIAL_DENSITIES[material_key]
+    
     contents = await file.read()
     np_arr = np.frombuffer(contents, np.uint8)
     image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -1483,7 +1499,7 @@ async def estimate_image_weight(file: UploadFile = File(...), density: float = F
         return {"error": "Invalid image file"}
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     try:
-        overlay, mass = calc_weight(image, density)
+        overlay, mass_tons = calc_weight(image, density_lbs_per_gal)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
@@ -1493,5 +1509,5 @@ async def estimate_image_weight(file: UploadFile = File(...), density: float = F
     return StreamingResponse(
         overlay_bytes,
         media_type="image/png",
-        headers={"X-Mass-Short-Ton": f"{mass:.2f}"}
+        headers={"X-Mass-Short-Ton": f"{mass_tons:.2f}"}
     )

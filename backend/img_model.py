@@ -150,12 +150,19 @@ def calc_volume(image):
     
     return overlay, pile_volume_m3
 
-def calc_weight(image, density):
-    overlay, vol = calc_volume(image=image)
-    short_ton = 907.1847
-    mass_kg = vol * density
-    mass_short_ton = mass_kg / short_ton
-    return overlay, mass_short_ton
+def calc_weight(image, density_lbs_per_gal):
+    overlay, vol_m3 = calc_volume(image=image)
+    
+    # Convert lbs/gal to lbs/m³: 1 gallon = 0.00378541 m³
+    density_lbs_per_m3 = density_lbs_per_gal / 0.00378541
+    
+    # Calculate mass in lbs
+    mass_lbs = vol_m3 * density_lbs_per_m3
+    
+    # Convert to tons (2000 lbs = 1 ton)
+    mass_tons = mass_lbs / 2000.0
+    
+    return overlay, mass_tons
 
 
 
