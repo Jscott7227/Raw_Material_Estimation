@@ -42,7 +42,7 @@ class TruckDelivery(Base):
     delivery_num: str = Column(String, unique=True, nullable=False)
     incoming_weight: float = Column(Float, nullable=False)
     delivery_time: str = Column(String, default=lambda: datetime.utcnow().isoformat())
-    status: str = Column(String, default="pending")
+    status: str = Column(String, default="Upcoming")
 
     material = relationship("Material", back_populates="deliveries")
 

@@ -39,7 +39,7 @@ class TruckDeliveryBase(BaseModel):
     incoming_weight: float = Field(..., ge=0.0)
     material_id: int = Field(..., ge=1)
     delivery_time: str = Field(..., example="2025-10-16T15:20:00")
-    status: str = Field("pending", pattern="^(pending|completed|upcoming)$")
+    status: str = Field("Upcoming", pattern="^(Upcoming|completed|upcoming)$")
 
 
 class TruckDeliveryRead(TruckDeliveryBase):
@@ -144,7 +144,7 @@ class DeliveryCreateRequest(BaseModel):
     material_code: str
     incoming_weight_lb: float = Field(..., ge=0)
     delivery_time: datetime
-    status: Optional[str] = Field(default="completed", pattern="^(pending|completed|upcoming)$")
+    status: Optional[str] = Field(default="completed", pattern="^(Upcoming|completed|upcoming)$")
 
 
 class BillOfLadingSimulationConfig(BaseModel):

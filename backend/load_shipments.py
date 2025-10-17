@@ -95,7 +95,7 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
             delivery_number = entry["deliveryNumber"]
             material_name = entry["material"]
             incoming_weight = float(entry.get("expectedWeight", entry.get("incomingWeight", 0)))
-            status = entry.get("status", "pending")
+            status = entry.get("status", "Upcoming")
             delivery_time = parse_delivery_datetime(entry["deliveryDateTime"])
             material_weight = float(entry.get("actualWeight", entry.get("materialWeight", 0.0)))
 

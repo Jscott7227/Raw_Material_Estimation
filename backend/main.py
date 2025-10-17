@@ -1054,12 +1054,12 @@ def _add_future_delivery(
         return
     if material is None:
         material = random.choice(materials)
-    horizon_hours = (4, 12) if status == "pending" else (12, 36)
+    horizon_hours = (4, 12) if status == "Upcoming" else (12, 36)
     delivery_time = (datetime.utcnow() + timedelta(hours=random.randint(*horizon_hours))).strftime(
         "%Y-%m-%d %H:%M"
     )
     if target_ratio is None:
-        target_ratio = 0.92 if status == "pending" else 0.78
+        target_ratio = 0.92 if status == "Upcoming" else 0.78
     target_ratio = max(0.55, min(target_ratio, 0.97))
     target_weight = BIN_CAPACITY_TONS * target_ratio
     deficit_tons = max(target_weight - material.weight, 0.0)
@@ -1103,9 +1103,9 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
         material = material_index.get(canonical)
         if not material:
             continue
-        status = entry.get("status", "pending").lower()
-        if status not in {"pending", "completed", "upcoming"}:
-            status = "pending"
+        status = entry.get("status", "Upcoming").lower()
+        if status not in {"Upcoming", "completed", "upcoming"}:
+            status = "Upcoming"
         db.add(
             TruckDelivery(
                 material_id=material.id,
@@ -1124,8 +1124,8 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
 
     if not db.query(TruckDelivery).filter(TruckDelivery.status == "upcoming").first():
         _add_future_delivery(db, materials, status="upcoming")
-    if not db.query(TruckDelivery).filter(TruckDelivery.status == "pending").first():
-        _add_future_delivery(db, materials, status="pending")
+    if not db.query(TruckDelivery).filter(TruckDelivery.status == "Upcoming").first():
+        _add_future_delivery(db, materials, status="Upcoming")
 
     reorder_threshold = BIN_CAPACITY_TONS * REORDER_THRESHOLD_RATIO
     for material in materials:
@@ -1134,7 +1134,7 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
                 db.query(TruckDelivery)
                 .filter(
                     TruckDelivery.material_id == material.id,
-                    TruckDelivery.status == "pending",
+                    TruckDelivery.status == "Upcoming",
                 )
                 .first()
             )
@@ -1142,7 +1142,7 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
                 _add_future_delivery(
                     db,
                     materials,
-                    status="pending",
+                    status="Upcoming",
                     material=material,
                     target_ratio=0.92,
                 )
@@ -1182,11 +1182,11 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
 
     focus_materials = {
         "sms clay": {
-            "pending": {"count": 3, "target_ratio": 0.96},
+            "Upcoming": {"count": 3, "target_ratio": 0.96},
             "upcoming": {"count": 2, "target_ratio": 0.9},
         },
         "feldspar": {
-            "pending": {"count": 3, "target_ratio": 0.95},
+            "Upcoming": {"count": 3, "target_ratio": 0.95},
             "upcoming": {"count": 2, "target_ratio": 0.88},
         },
     }
@@ -1200,7 +1200,7 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
         for status, config in targets.items():
             target_count = config.get("count", 0)
             ratio_hint = config.get(
-                "target_ratio", 0.9 if status == "pending" else 0.8
+                "target_ratio", 0.9 if status == "Upcoming" else 0.8
             )
             existing = (
                 db.query(TruckDelivery)
