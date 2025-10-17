@@ -1,8 +1,9 @@
 import asyncio
 import random
+from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import Generator, List, Optional
+from typing import Deque, Generator, List, Optional, Tuple
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -11,6 +12,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, init_db
+from load_shipments import (
+    DEFAULT_JSON as SHIPMENTS_DEFAULT_JSON,
+    canonical_material_name,
+    load_json_records,
+)
 from models import Material, TruckDelivery, MaterialInventoryHistory
 from schemas import (
     BillOfLading,
@@ -58,6 +64,8 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
 CARRIER_CHOICES = [
     "L&H Express",
     "Swift Logistics",
@@ -69,11 +77,14 @@ CARRIER_CHOICES = [
 BIN_CAPACITY_TONS = 1200.0
 REORDER_THRESHOLD_RATIO = 0.5
 WARNING_THRESHOLD_RATIO = 0.65
+ORDER_LEAD_TIME_DAYS = 4
+RESTOCK_TARGET_RATIO = 0.95
 
 DEMO_STATE: dict = {
     "task": None,
     "start_time": None,
     "duration": None,
+    "delivery_queue": deque(),
 }
 
 # Demo loops use these constants; replace with real recipe or schedule once production ready.
@@ -125,19 +136,20 @@ def _material_alerts(material: Material) -> List[MaterialAlert]:
 
     if ratio <= REORDER_THRESHOLD_RATIO:
         alerts.append(
-            MaterialAlert(
-                material_id=material.id,
-                material_type=material.type,
-                weight=material.weight,
-                fill_ratio=ratio,
-                bins_filled=metrics["bins_filled"],
-                alert_level="critical",
-                message=(
-                    f"{material.type} bin below 50% capacity "
-                    f"({material.weight:.1f} tons remaining; {(ratio * 100):.0f}% full)."
-                ),
+                MaterialAlert(
+                    material_id=material.id,
+                    material_type=material.type,
+                    weight=material.weight,
+                    fill_ratio=ratio,
+                    bins_filled=metrics["bins_filled"],
+                    alert_level="critical",
+                    message=(
+                        f"{material.type} bin below 50% capacity "
+                        f"({material.weight:.1f} tons remaining; {(ratio * 100):.0f}% full). "
+                        f"Lead time is {ORDER_LEAD_TIME_DAYS} days—place an order now."
+                    ),
+                )
             )
-        )
 
     return alerts
 
@@ -213,9 +225,15 @@ def _generate_recommendations(db: Session, days: int = 7) -> List[MaterialRecomm
 
         projected_weight = material.weight - avg_daily * days
         reorder_threshold = BIN_CAPACITY_TONS * REORDER_THRESHOLD_RATIO
-        days_until_reorder = None
+        lead_time = ORDER_LEAD_TIME_DAYS
+        days_until_reorder: Optional[float] = None
+        order_offset: Optional[float] = None
+
         if avg_daily > 0:
-            days_until_reorder = max(0.0, (material.weight - reorder_threshold) / avg_daily)
+            days_until_reorder = max(
+                0.0, (material.weight - reorder_threshold) / avg_daily
+            )
+            order_offset = max(days_until_reorder - lead_time, 0.0)
 
         recommended_tons = None
         recommended_date = None
@@ -224,23 +242,43 @@ def _generate_recommendations(db: Session, days: int = 7) -> List[MaterialRecomm
         if avg_daily <= 0.01:
             rationale = "No consumption detected; monitoring only"
         else:
-            if projected_weight <= reorder_threshold:
-                recommended_tons = max(0.0, BIN_CAPACITY_TONS - projected_weight)
-                recommended_date = datetime.utcnow() if days_until_reorder is not None and days_until_reorder <= 0 else (
-                    datetime.utcnow() + timedelta(days=days_until_reorder)
-                    if days_until_reorder is not None
-                    else datetime.utcnow()
-                )
-                rationale = (
-                    f"Projected to fall below threshold in {days_until_reorder:.1f} days; "
-                    f"order {recommended_tons:.1f} tons to refill bin"
-                )
-            elif days_until_reorder is not None and days_until_reorder <= days:
-                recommended_tons = max(0.0, BIN_CAPACITY_TONS - (material.weight - avg_daily * days_until_reorder))
-                recommended_date = datetime.utcnow() + timedelta(days=days_until_reorder)
-                rationale = (
-                    f"Reorder in {days_until_reorder:.1f} days to maintain safety stock"
-                )
+            target_weight = BIN_CAPACITY_TONS * RESTOCK_TARGET_RATIO
+            lead_consumption = avg_daily * lead_time
+            projected_at_arrival = material.weight - lead_consumption
+            refill_amount = max(0.0, target_weight - projected_at_arrival)
+
+            if refill_amount > 0:
+                recommended_tons = round(refill_amount, 2)
+                max_capacity_delta = max(0.0, BIN_CAPACITY_TONS - material.weight)
+                if max_capacity_delta > 0:
+                    recommended_tons = min(recommended_tons, round(max_capacity_delta, 2))
+
+            if days_until_reorder is not None:
+                if days_until_reorder <= lead_time:
+                    recommended_date = datetime.utcnow()
+                    rationale = (
+                        f"Reorder threshold hit in {days_until_reorder:.1f} days. "
+                        f"With a {lead_time}-day lead time, place an order immediately."
+                    )
+                elif order_offset is not None and order_offset <= days:
+                    recommended_date = datetime.utcnow() + timedelta(days=order_offset)
+                    rationale = (
+                        f"Reorder threshold expected in {days_until_reorder:.1f} days. "
+                        f"Order in {order_offset:.1f} days ({recommended_date.date()}) to account for "
+                        f"the {lead_time}-day lead time."
+                    )
+                elif projected_weight <= reorder_threshold:
+                    recommended_date = datetime.utcnow() + timedelta(days=days)
+                    rationale = (
+                        "Inventory projected to fall below threshold beyond current outlook; "
+                        "begin planning for a replenishment."
+                    )
+                else:
+                    recommended_date = None
+                    recommended_tons = None
+                    rationale = (
+                        "Inventory remains above reorder threshold for the selected horizon."
+                    )
 
         recommendations.append(
             MaterialRecommendation(
@@ -325,9 +363,30 @@ def _generate_bol_payload(
     if not materials:
         return None
 
-    material = random.choice(materials)
-    # TODO: replace random draw with actual load weights from TMS/scale integrations.
-    tons = round(random.uniform(config.min_tons, config.max_tons), 2)
+    material: Optional[Material] = None
+    target_ratio: Optional[float] = None
+
+    queue: Deque[Tuple[int, float]] = DEMO_STATE.get("delivery_queue")  # type: ignore
+    if queue:
+        while queue:
+            forced_id, forced_ratio = queue.popleft()
+            candidate = next((item for item in materials if item.id == forced_id), None)
+            if candidate:
+                material = candidate
+                target_ratio = forced_ratio
+                break
+
+    if material is None or target_ratio is None:
+        selection = _select_demo_delivery_material(materials)
+        if not selection:
+            return None
+        material, target_ratio = selection
+    deficit_tons = max(BIN_CAPACITY_TONS * target_ratio - material.weight, 0.0)
+    if deficit_tons <= 0:
+        return None
+
+    tons = min(max(deficit_tons, config.min_tons), config.max_tons)
+    tons = round(tons, 2)
     net_lb = round(tons * 2000, 2)
     tare_lb = round(random.uniform(25000, 32000), 2)
     gross_lb = round(net_lb + tare_lb, 2)
@@ -397,6 +456,7 @@ async def _stop_demo() -> None:
         except asyncio.CancelledError:
             pass
     DEMO_STATE.update({"task": None, "start_time": None, "duration": None})
+    DEMO_STATE["delivery_queue"] = deque()
 
 
 @app.get("/api/health")
@@ -511,6 +571,329 @@ def get_recommendations(days: int = 7, db: Session = Depends(get_db)) -> List[Ma
     return _generate_recommendations(db, days=days)
 
 
+def _distribute_consumption(total: float, periods: int) -> List[float]:
+    if total <= 0 or periods <= 0:
+        return [0.0] * max(periods, 0)
+    draws = [random.uniform(0.6, 1.4) for _ in range(periods)]
+    scale = total / (sum(draws) or 1.0)
+    values = [round(draw * scale, 2) for draw in draws]
+    drift = round(total - sum(values), 2)
+    values[-1] = round(values[-1] + drift, 2)
+    return values
+
+
+def _shape_demo_levels(materials: List[Material]) -> List[Material]:
+    if not materials:
+        return []
+    ordered = sorted(materials, key=lambda material: material.id)
+    profiles = [0.94, 0.82, 0.68, 0.48, 0.42, 0.59, 0.75]
+    for index, material in enumerate(ordered):
+        ratio = profiles[index] if index < len(profiles) else profiles[-1]
+        target_weight = round(BIN_CAPACITY_TONS * ratio, 2)
+        material.weight = max(0.0, min(target_weight, BIN_CAPACITY_TONS))
+    return ordered
+
+
+def _material_fill_ratio(material: Material) -> float:
+    if BIN_CAPACITY_TONS <= 0:
+        return 0.0
+    return max(0.0, material.weight / BIN_CAPACITY_TONS)
+
+
+def _select_demo_delivery_material(materials: List[Material]) -> Optional[Tuple[Material, float]]:
+    if not materials:
+        return None
+
+    lows = [
+        material
+        for material in materials
+        if _material_fill_ratio(material) <= REORDER_THRESHOLD_RATIO
+    ]
+    if lows:
+        material = min(lows, key=_material_fill_ratio)
+        target = random.uniform(0.9, 0.96)
+        return material, target
+
+    mediums = [
+        material
+        for material in materials
+        if REORDER_THRESHOLD_RATIO < _material_fill_ratio(material) <= WARNING_THRESHOLD_RATIO
+    ]
+    if mediums and random.random() < 0.7:
+        material = min(mediums, key=_material_fill_ratio)
+        target = random.uniform(0.83, 0.9)
+        return material, target
+
+    highs = [
+        material
+        for material in materials
+        if _material_fill_ratio(material) > WARNING_THRESHOLD_RATIO
+    ]
+    if highs and random.random() < 0.2:
+        material = random.choice(highs)
+        current_ratio = _material_fill_ratio(material)
+        baseline = random.uniform(0.76, 0.85)
+        target = max(baseline, current_ratio + 0.02)
+        target = min(target, 0.95)
+        return material, target
+
+    return None
+
+
+def _seed_demo_history(
+    db: Session,
+    materials: List[Material],
+    *,
+    days: int = 7,
+    replace: bool = True,
+) -> None:
+    if not materials:
+        return
+
+    base_time = datetime.utcnow() - timedelta(days=days)
+
+    for material in materials:
+        if replace:
+            db.query(MaterialInventoryHistory).filter(
+                MaterialInventoryHistory.material_id == material.id
+            ).delete()
+        current_weight = float(material.weight or 0.0)
+        extra = random.uniform(80, 220)
+        start_weight = min(
+            BIN_CAPACITY_TONS * 0.98,
+            max(current_weight + 40.0, current_weight + extra),
+        )
+        total_consumption = max(start_weight - current_weight, 0.0)
+        if total_consumption <= 1e-2:
+            total_consumption = max(60.0, current_weight * 0.25)
+            start_weight = min(
+                BIN_CAPACITY_TONS * 0.98, current_weight + total_consumption
+            )
+
+        consumption_series = _distribute_consumption(total_consumption, days)
+        timestamp = base_time
+        running_weight = start_weight
+
+        for draw in consumption_series:
+            db.add(
+                MaterialInventoryHistory(
+                    material_id=material.id,
+                    weight=round(max(running_weight, 0.0), 2),
+                    recorded_at=timestamp,
+                )
+            )
+            running_weight = max(running_weight - draw, 0.0)
+            timestamp += timedelta(days=1)
+
+        db.add(
+            MaterialInventoryHistory(
+                material_id=material.id,
+                weight=round(current_weight, 2),
+                recorded_at=datetime.utcnow(),
+            )
+        )
+
+
+def _add_future_delivery(
+    db: Session,
+    materials: List[Material],
+    *,
+    status: str,
+    material: Optional[Material] = None,
+    target_ratio: Optional[float] = None,
+) -> None:
+    if not materials and material is None:
+        return
+    if material is None:
+        material = random.choice(materials)
+    horizon_hours = (4, 12) if status == "pending" else (12, 36)
+    delivery_time = (datetime.utcnow() + timedelta(hours=random.randint(*horizon_hours))).strftime(
+        "%Y-%m-%d %H:%M"
+    )
+    if target_ratio is None:
+        target_ratio = 0.92 if status == "pending" else 0.78
+    target_ratio = max(0.55, min(target_ratio, 0.97))
+    target_weight = BIN_CAPACITY_TONS * target_ratio
+    deficit_tons = max(target_weight - material.weight, 0.0)
+    if deficit_tons <= 0:
+        return
+    incoming_tons = min(
+        max(deficit_tons, DEMO_DELIVERY_CONFIG.min_tons),
+        DEMO_DELIVERY_CONFIG.max_tons,
+    )
+    incoming_weight_lb = round(incoming_tons * 2000, 2)
+    delivery = TruckDelivery(
+        material_id=material.id,
+        delivery_num=f"DEMO-{uuid4().hex[:6].upper()}-{status[:3].upper()}",
+        incoming_weight=incoming_weight_lb,
+        delivery_time=delivery_time,
+        status=status,
+    )
+    db.add(delivery)
+
+
+def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
+    try:
+        records = list(load_json_records(SHIPMENTS_DEFAULT_JSON))
+    except FileNotFoundError:
+        records = []
+    except Exception:
+        records = []
+
+    existing_numbers = {
+        delivery.delivery_num for delivery in db.query(TruckDelivery).all()
+    }
+    material_index = {
+        material.type.strip().lower(): material for material in materials
+    }
+
+    for entry in records:
+        delivery_number = entry.get("deliveryNumber")
+        if not delivery_number or delivery_number in existing_numbers:
+            continue
+        canonical = canonical_material_name(entry.get("material", "")).strip().lower()
+        material = material_index.get(canonical)
+        if not material:
+            continue
+        status = entry.get("status", "pending").lower()
+        if status not in {"pending", "completed", "upcoming"}:
+            status = "pending"
+        db.add(
+            TruckDelivery(
+                material_id=material.id,
+                delivery_num=delivery_number,
+                incoming_weight=float(entry.get("incomingWeight", 0.0)),
+                delivery_time=entry.get(
+                    "deliveryDateTime",
+                    datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+                ),
+                status=status,
+            )
+        )
+        existing_numbers.add(delivery_number)
+
+    db.flush()
+
+    if not db.query(TruckDelivery).filter(TruckDelivery.status == "upcoming").first():
+        _add_future_delivery(db, materials, status="upcoming")
+    if not db.query(TruckDelivery).filter(TruckDelivery.status == "pending").first():
+        _add_future_delivery(db, materials, status="pending")
+
+    reorder_threshold = BIN_CAPACITY_TONS * REORDER_THRESHOLD_RATIO
+    for material in materials:
+        if material.weight <= reorder_threshold:
+            existing_pending = (
+                db.query(TruckDelivery)
+                .filter(
+                    TruckDelivery.material_id == material.id,
+                    TruckDelivery.status == "pending",
+                )
+                .first()
+            )
+            if not existing_pending:
+                _add_future_delivery(
+                    db,
+                    materials,
+                    status="pending",
+                    material=material,
+                    target_ratio=0.92,
+                )
+            existing_upcoming = (
+                db.query(TruckDelivery)
+                .filter(
+                    TruckDelivery.material_id == material.id,
+                    TruckDelivery.status == "upcoming",
+                )
+                .first()
+            )
+            if not existing_upcoming:
+                _add_future_delivery(
+                    db,
+                    materials,
+                    status="upcoming",
+                    material=material,
+                    target_ratio=0.8,
+                )
+        elif material.weight <= reorder_threshold * 1.1:
+            existing_upcoming = (
+                db.query(TruckDelivery)
+                .filter(
+                    TruckDelivery.material_id == material.id,
+                    TruckDelivery.status == "upcoming",
+                )
+                .first()
+            )
+            if not existing_upcoming:
+                _add_future_delivery(
+                    db,
+                    materials,
+                    status="upcoming",
+                    material=material,
+                    target_ratio=0.85,
+                )
+
+    focus_materials = {
+        "sms clay": {
+            "pending": {"count": 3, "target_ratio": 0.96},
+            "upcoming": {"count": 2, "target_ratio": 0.9},
+        },
+        "feldspar": {
+            "pending": {"count": 3, "target_ratio": 0.95},
+            "upcoming": {"count": 2, "target_ratio": 0.88},
+        },
+    }
+    for name, targets in focus_materials.items():
+        material = next(
+            (item for item in materials if item.type.strip().lower() == name),
+            None,
+        )
+        if not material:
+            continue
+        for status, config in targets.items():
+            target_count = config.get("count", 0)
+            ratio_hint = config.get(
+                "target_ratio", 0.9 if status == "pending" else 0.8
+            )
+            existing = (
+                db.query(TruckDelivery)
+                .filter(
+                    TruckDelivery.material_id == material.id,
+                    TruckDelivery.status == status,
+                )
+                .count()
+            )
+            for _ in range(max(0, target_count - existing)):
+                _add_future_delivery(
+                    db,
+                    materials,
+                    status=status,
+                    material=material,
+                    target_ratio=ratio_hint,
+                )
+
+
+def _prepare_demo_delivery_queue() -> None:
+    session = SessionLocal()
+    try:
+        materials = session.query(Material).all()
+        queue: Deque[Tuple[int, float]] = deque()
+        focus_plan = [
+            ("sms clay", 0.97, 4),
+            ("feldspar", 0.95, 4),
+        ]
+        for name, ratio, count in focus_plan:
+            material = next(
+                (item for item in materials if item.type.strip().lower() == name),
+                None,
+            )
+            if not material:
+                continue
+            for _ in range(count):
+                queue.append((material.id, ratio))
+        DEMO_STATE["delivery_queue"] = queue
+    finally:
+        session.close()
+
 @app.post("/api/demo/seed", response_model=List[MaterialRead])
 def seed_demo_inventory(
     payload: DemoSeedRequest,
@@ -519,13 +902,17 @@ def seed_demo_inventory(
     if not payload.inventory:
         raise HTTPException(status_code=400, detail="Inventory list cannot be empty")
 
-    provided = {
-        item.material.strip().lower(): item
-        for item in payload.inventory
-        if item.material.strip()
-    }
+    normalized_inventory = {}
+    canonical_lookup = {}
+    for item in payload.inventory:
+        if not item.material.strip():
+            continue
+        canonical = canonical_material_name(item.material).strip()
+        key = canonical.lower()
+        normalized_inventory[key] = item
+        canonical_lookup[key] = canonical
 
-    if not provided:
+    if not normalized_inventory:
         raise HTTPException(status_code=400, detail="No valid material names supplied")
 
     materials_by_name = {
@@ -535,37 +922,70 @@ def seed_demo_inventory(
 
     updated_materials: List[Material] = []
 
-    for name, item in list(provided.items()):
-        material = materials_by_name.get(name)
+    for key, item in normalized_inventory.items():
+        canonical = canonical_lookup[key]
+        material = materials_by_name.get(key)
         if material:
+            material.type = canonical
             material.weight = item.weight
             if item.humidity is not None:
                 material.humidity = item.humidity
             if item.density is not None:
                 material.density = item.density
             updated_materials.append(material)
-            provided.pop(name)
+        else:
+            material = Material(
+                type=canonical,
+                weight=item.weight,
+                humidity=item.humidity or 0.0,
+                density=item.density or 0.0,
+            )
+            db.add(material)
+            updated_materials.append(material)
+            materials_by_name[key] = material
 
-    for name, item in provided.items():
-        material = Material(
-            type=item.material.strip(),
-            weight=item.weight,
-            humidity=item.humidity or 0.0,
-            density=item.density or 0.0,
-        )
-        db.add(material)
-        db.flush()
-        updated_materials.append(material)
+    db.flush()
+
+    all_materials = list(db.query(Material).order_by(Material.id.asc()).all())
+    shaped_materials = _shape_demo_levels(all_materials)
+    unique_materials = {material.id: material for material in updated_materials}
+    for material in shaped_materials:
+        unique_materials.setdefault(material.id, material)
+    updated_materials = list(unique_materials.values())
+    db.flush()
 
     if payload.reset_deliveries:
         db.query(TruckDelivery).delete()
+        db.flush()
 
     if payload.reset_history:
         db.query(MaterialInventoryHistory).delete()
-        _record_history(db, db.query(Material).all())
+        db.flush()
+        _seed_demo_history(db, all_materials, replace=False)
     else:
-        if updated_materials:
-            _record_history(db, updated_materials)
+        needs_history: List[Material] = []
+        for material in updated_materials:
+            existing_points = (
+                db.query(MaterialInventoryHistory)
+                .filter(MaterialInventoryHistory.material_id == material.id)
+                .count()
+            )
+            if existing_points < 2:
+                needs_history.append(material)
+
+        if needs_history:
+            _seed_demo_history(db, needs_history, replace=True)
+
+        needs_history_ids = {material.id for material in needs_history}
+        remaining = [
+            material
+            for material in updated_materials
+            if material.id not in needs_history_ids
+        ]
+        if remaining:
+            _record_history(db, remaining)
+
+    _ensure_demo_deliveries(db, all_materials)
 
     db.commit()
 
@@ -583,6 +1003,8 @@ async def start_demo(duration_seconds: int = 30) -> DemoStatus:
         raise HTTPException(status_code=409, detail="Demo already running")
 
     await _stop_demo()
+
+    _prepare_demo_delivery_queue()
 
     start_time = datetime.utcnow()
     DEMO_STATE.update({"start_time": start_time, "duration": duration_seconds})

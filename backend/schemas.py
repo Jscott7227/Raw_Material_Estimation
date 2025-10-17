@@ -97,6 +97,24 @@ class DemoSeedRequest(BaseModel):
     reset_deliveries: bool = False
     reset_history: bool = True
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "inventory": [
+                    {"material": "Super Strength 2", "weight": 950},
+                    {"material": "TN Stone", "weight": 620},
+                    {"material": "SMS Clay", "weight": 480},
+                    {"material": "Minspar", "weight": 810},
+                    {"material": "Sandspar", "weight": 585},
+                    {"material": "Feldspar", "weight": 720},
+                    {"material": "LR28", "weight": 540}
+                ],
+                "reset_deliveries": True,
+                "reset_history": True
+            }
+        }
+    )
+
 
 class MaterialAdjustRequest(BaseModel):
     delta: float
