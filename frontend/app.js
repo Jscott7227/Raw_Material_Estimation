@@ -251,4 +251,25 @@ function filterStatus(status) {
     }
 }
 
+async function getAllWeights(material) { 
+    const response = await fetch('../backend/data/currMaterialWeight.json'); 
+    currentWeight = await response.json(); 
+    const arrMaterialType = [ 
+        {id:'SS2',cardName:'SS2CurrTonne'}, 
+        {id:'TNStone', cardName:'TNStoneCurrTonne'}, 
+        {id:'SMSClay', cardName:'intSMSClayCurrTonne'}, 
+        {id:'LR28', cardName:'intLR28MWeightCurrTonne'}, 
+        {id:'Minispar', cardName:'intMinsparCurrTonne'}, 
+        {id:'Sandspar', cardName:'intSandsparCurrTonne'}, 
+        { id:'Feldspar', cardName:'intFeldsparCurrTonne'} ] 
+
+        arrMaterialType.forEach(item => { 
+            const weightObj = currentWeight.find(w => w.type === item.id); 
+            if (weightObj) { 
+                document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
+            } 
+        }); 
+}
+
 window.onload = loadShipments;
+window.addEventListener('DOMContentLoaded', getAllWeights);
