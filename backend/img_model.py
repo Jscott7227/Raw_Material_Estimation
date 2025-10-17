@@ -1,21 +1,30 @@
-import torch
+"""Helpers for optional image-based mass estimation."""
+
+import os
+from typing import Optional, Tuple
+
 import cv2
 import numpy as np
-from torchvision.transforms import Compose, Resize, ToTensor, Normalize
-from PIL import Image
-import matplotlib.pyplot as plt
-from matplotlib import cm
-import os
-from segment_anything import sam_model_registry, SamPredictor, SamAutomaticMaskGenerator
+import torch
 import torchvision
-from segment_anything import sam_model_registry, SamPredictor, SamAutomaticMaskGenerator
+from matplotlib import cm
+from segment_anything import SamAutomaticMaskGenerator, SamPredictor, sam_model_registry
+
 if not hasattr(torchvision, "_is_tracing"):
     torchvision._is_tracing = lambda: False
-    
 
-sam = sam_model_registry["vit_b"](checkpoint="sam_vit_b_01ec64.pth")
-sam.eval()
-mask_generator = SamAutomaticMaskGenerator(sam)
+
+def _load_sam() -> Optional[SamAutomaticMaskGenerator]:
+    """Return a SAM mask generator if the checkpoint is available."""
+    checkpoint = os.environ.get("SAM_CHECKPOINT_PATH", "sam_vit_b_01ec64.pth")
+    if not os.path.exists(checkpoint):
+        return None
+    sam = sam_model_registry["vit_b"](checkpoint=checkpoint)
+    sam.eval()
+    return SamAutomaticMaskGenerator(sam)
+
+
+mask_generator = _load_sam()
 
 
 def color_filter_custom(image, mask):
@@ -34,14 +43,15 @@ def color_filter_custom(image, mask):
 import cv2
 import numpy as np
 
-def segment_grain_pile(image):
-    print(image)
-    sam_masks = mask_generator.generate(image)  # Generate SAM masks
-    print(len(sam_masks))
+def segment_grain_pile(image: np.ndarray) -> Tuple[np.ndarray, list, list]:
+    if mask_generator is None:
+        raise FileNotFoundError(
+            "SAM checkpoint not found. Set SAM_CHECKPOINT_PATH or place 'sam_vit_b_01ec64.pth' in the backend directory."
+        )
 
+    sam_masks = mask_generator.generate(image)
     if not sam_masks:
-        print("Fuck")
-        return image, [], []  # No masks found
+        return image, [], []
 
     filtered_masks = []
     original_masks = []
@@ -85,15 +95,13 @@ def segment_grain_pile(image):
 
     return image, [best_filtered_mask], [best_original_mask]
 
-def get_image_mask(image):
-        image, filtered_masks, sam_masks = segment_grain_pile(image)
-        heatmap = (cm.jet(filtered_masks[0])[:, :, :3] * 255).astype(np.uint8)
-        overlay = cv2.addWeighted(image[:, :, ::-1], 0.5, heatmap, 0.5, 0)
-        cv2.imwrite("overlay_mask.png", overlay)
-        return overlay, filtered_masks[0]
-
-image = cv2.cvtColor(cv2.imread("image (6).png"), cv2.COLOR_BGR2RGB)
-get_image_mask(image)
+def get_image_mask(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    image, filtered_masks, _ = segment_grain_pile(image)
+    if not filtered_masks:
+        raise ValueError("Unable to locate material pile in supplied image.")
+    heatmap = (cm.jet(filtered_masks[0])[:, :, :3] * 255).astype(np.uint8)
+    overlay = cv2.addWeighted(image[:, :, ::-1], 0.5, heatmap, 0.5, 0)
+    return overlay, filtered_masks[0]
 
 def calc_volume(image):
     overlay, mask = get_image_mask(image=image)
@@ -149,23 +157,4 @@ def calc_weight(image, density):
     mass_short_ton = mass_kg / short_ton
     return overlay, mass_short_ton
         
-image = cv2.cvtColor(cv2.imread("image (6).png"), cv2.COLOR_BGR2RGB)
-overlay, mass = calc_weight(image=image, density=95)
-print(mass)
-    
-# image_path = "image (6).png"
-# output_folder = "test"
-# os.makedirs(output_folder, exist_ok=True)
-# image, filtered_masks, sam_masks = segment_grain_pile(image_path)
-# base_name = os.path.splitext(os.path.basename(image_path))[0]
-# print(len(filtered_masks))
-# for i, mask in enumerate(filtered_masks):
-#     print("WTF")
-#     mask_path = os.path.join(output_folder, f"{base_name}_sammask_{i}.png")
-#     cv2.imwrite(mask_path, mask)
-    
-#     # Optional display
-#     plt.imshow(image)
-#     plt.imshow(mask, alpha=0.5)
-#     plt.axis("off")
-#     plt.show()
+__all__ = ["calc_weight"]

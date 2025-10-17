@@ -1481,7 +1481,12 @@ async def estimate_image_weight(file: UploadFile, density: float):
     if image is None:
         return {"error": "Invalid image file"}
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    overlay, mass = calc_weight(image, density)
+    try:
+        overlay, mass = calc_weight(image, density)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     _, buffer = cv2.imencode(".png", overlay)
     overlay_bytes = BytesIO(buffer.tobytes())
     return StreamingResponse(
