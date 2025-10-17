@@ -16,15 +16,16 @@ function formatTons(value) {
     return `${normalized.toLocaleString()} tons`;
 }
 
-function classifyMaterial(weight) {
-    if (weight >= 800) {
-        return { label: 'High Stock', tone: 'green' };
-    }
-    if (weight >= 400) {
-        return { label: 'Moderate Stock', tone: 'yellow' };
-    }
-    return { label: 'Low Stock', tone: 'red' };
-}
+// function classifyMaterial(weight) {
+//     if (weight >= 800) {
+//         return { label: 'High Stock', tone: 'green' };
+//     }
+//     if (weight >= 400) {
+//         return { label: 'Moderate Stock', tone: 'yellow' };
+//     }
+//     return { label: 'Low Stock', tone: 'red' };
+
+// }
 
 function getCurrentDate() {
     const today = new Date();
@@ -204,18 +205,16 @@ function updateDateRange() {
 
 function renderMaterials() {
     const cardsContainer = document.getElementById('materialCards');
-    const totalWeightLabel = document.getElementById('totalWeight');
-    const warningBanner = document.getElementById('iconWarning');
-    const warningText = document.getElementById('warningText');
+    const warningBanner = document.getElementById('cardWarning');
+    const warningText = document.getElementById('txtWarningMsg');
 
-    if (!cardsContainer || !totalWeightLabel) {
+    if (!cardsContainer) {
         return;
     }
 
     cardsContainer.innerHTML = '';
 
     if (!Array.isArray(materialsData) || materialsData.length === 0) {
-        totalWeightLabel.textContent = 'Total Weight: 0 tons';
         if (warningBanner) {
             warningBanner.hidden = true;
         }
@@ -223,16 +222,19 @@ function renderMaterials() {
     }
 
     const lowStockMaterials = [];
-    let runningTotal = 0;
 
     materialsData.forEach((material) => {
         const weight = Number(material.weight) || 0;
         runningTotal += weight;
 
         const { label, tone } = classifyMaterial(weight);
+        // implememnt isSuperLow()
         if (tone === 'red') {
             lowStockMaterials.push(material.type);
         }
+
+        console.log(`${lowStockMaterials}`);
+
 
         const card = document.createElement('div');
         card.className = 'card';
@@ -245,8 +247,6 @@ function renderMaterials() {
         `;
         cardsContainer.appendChild(card);
     });
-
-    totalWeightLabel.textContent = `Total Weight: ${runningTotal.toLocaleString()} tons`;
 
     if (warningBanner && warningText) {
         if (lowStockMaterials.length > 0) {
@@ -366,30 +366,10 @@ async function getAllWeights(material) {
         }); 
 
         document.getElementById('txtTotalWeight').innerHTML = `Total Weight: ${total.toFixed(0)} st`; 
-
 }
 
-// function calculateTotal(){
-//     arrMaterialType.forEach(item => { 
-//         const weightObj = currentWeight.find(w => w.type === item.id); 
-//         if (weightObj) {
-//             if(weightObj.metric == 'kg'){
-//                 weightInStones = weightObj.weight/6.35029;
-//             }
-//             document.getElementById(item.cardName).innerHTML = `${weightObj.weight} ${weightObj.metric}`; 
-//             total = total + weightInStones;
-//         } 
-//     }); 
-
-//     document.getElementById('txtTotalWeight').innerHTML = `Total Weight: ${total} stones`; 
-// }
 
 window.addEventListener('load', () => {
-    document.getElementById('btnGenerateTotal')?.addEventListener('click', renderMaterials);
-    document.getElementById('btnPDFExport')?.addEventListener('click', () => {
-        console.log('PDF export requested. Implement export pipeline here.');
-    });
     loadShipments();
+    getAllWeights();
 });
-
-window.addEventListener('DOMContentLoaded', getAllWeights);
