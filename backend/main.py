@@ -11,7 +11,7 @@ from img_model import calc_weight
 import cv2
 import numpy as np
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy import func
@@ -73,6 +73,7 @@ app.add_middleware(
     allow_origins=["*"],  # open for hackathon simplicity
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=['X-Mass-Short-Ton']
 )
 
 def get_db() -> Generator[Session, None, None]:
@@ -1474,7 +1475,7 @@ def import_bill_of_lading(
 
 
 @app.post("/api/weight")
-async def estimate_image_weight(file: UploadFile, density: float):
+async def estimate_image_weight(file: UploadFile = File(...), density: float = Form(...)):
     contents = await file.read()
     np_arr = np.frombuffer(contents, np.uint8)
     image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)

@@ -584,11 +584,11 @@ async function analyzeImage() {
 
         const massHeader = response.headers.get('X-Mass-Short-Ton');
         const blob = await response.blob();
-        const overlayUrl = URL.createObjectURL(blob);
+        const imageUrl = URL.createObjectURL(blob);
 
         const uploadedImage = document.getElementById('uploadedImage');
         if (uploadedImage) {
-            uploadedImage.src = overlayUrl;
+            uploadedImage.src = imageUrl;
         }
 
         if (resultNumber) {
@@ -599,12 +599,7 @@ async function analyzeImage() {
         }
     } catch (error) {
         console.error('Failed to analyze image:', error);
-        if (resultNumber) {
-            resultNumber.textContent = '--';
-        }
-        if (resultDetails) {
-            resultDetails.textContent = 'Unable to analyze image. Please try again.';
-        }
+        alert('Image analysis failed. Please try again.');
     } finally {
         if (loadingSection) {
             loadingSection.hidden = true;
@@ -616,8 +611,15 @@ async function analyzeImage() {
             newImageSection.style.display = 'block';
         }
         analyzeButton.disabled = false;
+        if (materialSelect) {
+            materialSelect.disabled = false;
+        }
+        if (densityInput) {
+            densityInput.disabled = false;
+        }
     }
 }
+
 
 function resetImageUpload() {
     uploadedFile = null;
