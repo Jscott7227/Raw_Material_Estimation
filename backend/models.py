@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Material(Base):
@@ -41,8 +45,8 @@ class TruckDelivery(Base):
     material_id: int = Column(Integer, ForeignKey("materials.id"), nullable=False)
     delivery_num: str = Column(String, unique=True, nullable=False)
     incoming_weight: float = Column(Float, nullable=False)
-    delivery_time: str = Column(String, default=lambda: datetime.utcnow().isoformat())
-    status: str = Column(String, default="Upcoming")
+    delivery_time: datetime = Column(DateTime, default=utc_now, nullable=False)
+    status: str = Column(String, default="upcoming", nullable=False)
 
     material = relationship("Material", back_populates="deliveries")
 
@@ -53,6 +57,6 @@ class MaterialInventoryHistory(Base):
     id: int = Column(Integer, primary_key=True, index=True)
     material_id: int = Column(Integer, ForeignKey("materials.id"), nullable=False, index=True)
     weight: float = Column(Float, nullable=False)
-    recorded_at: datetime = Column(DateTime, default=datetime.utcnow, index=True)
+    recorded_at: datetime = Column(DateTime, default=utc_now, index=True)
 
     material = relationship("Material", backref="history")

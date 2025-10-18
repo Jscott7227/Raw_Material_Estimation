@@ -113,10 +113,10 @@ body {
 
 .content.active { display: block; }
 
-.cards-grid { 
-    display: grid; 
-    grid-template-columns: repeat(3, 1fr); 
-    gap: 20px; 
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
 }
 
 .card { 
@@ -366,6 +366,13 @@ body {
     margin-bottom: 10px;
 }
 
+.card-metrics {
+    font-size: 0.85em;
+    color: #6b7280;
+    text-align: center;
+    margin-bottom: 6px;
+}
+
 .card-indicator {
     padding: 10px;
     text-align: center;
@@ -405,6 +412,96 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+.orders-panel {
+    margin-top: 24px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    padding: 20px;
+}
+
+.orders-header {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #1a202c;
+}
+
+.orders-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.orders-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    font-size: 0.9rem;
+}
+
+.orders-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.orders-title {
+    font-weight: 600;
+    color: #111827;
+}
+
+.orders-meta {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.orders-empty {
+    font-size: 0.9rem;
+    color: #6b7280;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.badge-warning {
+    background: #fef08a;
+    color: #854d0e;
+    margin-top: 6px;
+}
+
+.badge-pending {
+    background: #fde68a;
+    color: #92400e;
+}
+
+.badge-confirmed {
+    background: #bbf7d0;
+    color: #166534;
+}
+
+.badge-scheduled {
+    background: #bfdbfe;
+    color: #1d4ed8;
+}
+
+.badge-cancelled {
+    background: #fecaca;
+    color: #b91c1c;
 }
 
 .recommendation-item {

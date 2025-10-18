@@ -1,19 +1,23 @@
 import asyncio
 import math
 import random
-from collections import deque
+import statistics
+from collections import deque, defaultdict
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from typing import Deque, Generator, List, Optional, Tuple
+from typing import Deque, Dict, Generator, List, Optional, Tuple
 from uuid import uuid4
-from img_model import calc_weight
+try:  # Allow both package and flat module imports
+    from .img_model import ImageModelDependencyError, calc_weight  # type: ignore
+except ImportError:  # pragma: no cover - used in Docker image where modules live flat
+    from img_model import ImageModelDependencyError, calc_weight
 import cv2
 import numpy as np
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -28,28 +32,58 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from database import SessionLocal, init_db
-from load_shipments import (
-    DEFAULT_JSON as SHIPMENTS_DEFAULT_JSON,
-    canonical_material_name,
-    load_json_records,
-)
-from models import Material, TruckDelivery, MaterialInventoryHistory
-from schemas import (
-    BillOfLading,
-    BillOfLadingSimulationConfig,
-    DemoStatus,
-    DemoSeedRequest,
-    MaterialAlert,
-    MaterialRead,
-    MaterialRecommendation,
-    MaterialCreate,
-    MaterialUpdate,
-    MaterialAdjustRequest,
-    DeliveryCreateRequest,
-    SensorEvent,
-    TruckDeliveryRead,
-)
+try:
+    from .database import SessionLocal, init_db  # type: ignore
+    from .load_shipments import (
+        DEFAULT_JSON as SHIPMENTS_DEFAULT_JSON,
+        canonical_material_name,
+        load_json_records,
+    )
+    from .utils import normalize_delivery_status, parse_delivery_timestamp
+    from .models import Material, TruckDelivery, MaterialInventoryHistory
+    from .orders import load_orders, OrderRecord  # type: ignore
+    from .schemas import (
+        BillOfLading,
+        BillOfLadingSimulationConfig,
+        DemoStatus,
+        DemoSeedRequest,
+        MaterialAlert,
+        MaterialRead,
+        MaterialRecommendation,
+        MaterialCreate,
+        MaterialUpdate,
+        MaterialAdjustRequest,
+        DeliveryCreateRequest,
+        SensorEvent,
+        TruckDeliveryRead,
+        OrderSummary,
+    )
+except ImportError:  # pragma: no cover
+    from database import SessionLocal, init_db  # type: ignore
+    from load_shipments import (
+        DEFAULT_JSON as SHIPMENTS_DEFAULT_JSON,
+        canonical_material_name,
+        load_json_records,
+    )
+    from utils import normalize_delivery_status, parse_delivery_timestamp
+    from models import Material, TruckDelivery, MaterialInventoryHistory
+    from orders import load_orders, OrderRecord  # type: ignore
+    from schemas import (
+        BillOfLading,
+        BillOfLadingSimulationConfig,
+        DemoStatus,
+        DemoSeedRequest,
+        MaterialAlert,
+        MaterialRead,
+        MaterialRecommendation,
+        MaterialCreate,
+        MaterialUpdate,
+        MaterialAdjustRequest,
+        DeliveryCreateRequest,
+        SensorEvent,
+        TruckDeliveryRead,
+        OrderSummary,
+    )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -116,8 +150,90 @@ DEMO_DELIVERY_CONFIG = BillOfLadingSimulationConfig(
     max_tons=32.0,
 )
 
+_CLOSED_ORDER_STATUSES = {"completed", "fulfilled", "delivered", "cancelled"}
 
-def _material_metrics(material: Material) -> dict:
+
+def _orders_by_material() -> Dict[str, List[OrderRecord]]:
+    orders_map: Dict[str, List[OrderRecord]] = defaultdict(list)
+    for order in load_orders():
+        key = canonical_material_name(order.material).strip().lower()
+        orders_map[key].append(order)
+    return orders_map
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _daily_consumption_deltas(db: Session, material_id: int, days: int = 7) -> List[float]:
+    end = _utc_now()
+    start = end - timedelta(days=days)
+    history = (
+        db.query(MaterialInventoryHistory)
+        .filter(
+            MaterialInventoryHistory.material_id == material_id,
+            MaterialInventoryHistory.recorded_at >= start,
+        )
+        .order_by(MaterialInventoryHistory.recorded_at.asc())
+        .all()
+    )
+    if len(history) < 2:
+        return []
+    deltas: List[float] = []
+    for prev, curr in zip(history, history[1:]):
+        delta = (prev.weight or 0.0) - (curr.weight or 0.0)
+        if delta > 0:
+            deltas.append(delta)
+    return deltas
+
+
+def _delivery_amounts(db: Session, material_id: int, lookback_days: int = 30) -> List[float]:
+    cutoff = _utc_now() - timedelta(days=lookback_days)
+    deliveries = (
+        db.query(TruckDelivery)
+        .filter(
+            TruckDelivery.material_id == material_id,
+            TruckDelivery.status == "completed",
+        )
+        .all()
+    )
+    amounts: List[float] = []
+    for delivery in deliveries:
+        delivered_at = _ensure_utc(delivery.delivery_time)
+        if delivered_at < cutoff:
+            continue
+        try:
+            incoming = float(delivery.incoming_weight or 0.0)
+        except TypeError:
+            incoming = 0.0
+        amounts.append(round(incoming / 2000.0, 2))
+    return amounts
+
+
+def _material_metrics(material: Material, db: Session, orders_map: Optional[Dict[str, List[OrderRecord]]] = None) -> dict:
+    if orders_map is None:
+        orders_map = _orders_by_material()
+
+    consumption_deltas = _daily_consumption_deltas(db, material.id)
+    consumption_std = statistics.stdev(consumption_deltas) if len(consumption_deltas) > 1 else 0.0
+
+    delivery_amounts = _delivery_amounts(db, material.id)
+    delivery_std = statistics.stdev(delivery_amounts) if len(delivery_amounts) > 1 else 0.0
+
+    key = material.type.strip().lower()
+    material_orders = orders_map.get(key, [])
+    open_orders_total = sum(
+        order.required_tons
+        for order in material_orders
+        if order.status not in _CLOSED_ORDER_STATUSES
+    )
+
     fill_ratio = material.weight / BIN_CAPACITY_TONS if BIN_CAPACITY_TONS else 0.0
     bins_filled = material.weight / BIN_CAPACITY_TONS if BIN_CAPACITY_TONS else 0.0
     return {
@@ -130,12 +246,15 @@ def _material_metrics(material: Material) -> dict:
         "fill_ratio": max(fill_ratio, 0.0),
         "bins_filled": max(bins_filled, 0.0),
         "needs_reorder": material.weight <= BIN_CAPACITY_TONS * REORDER_THRESHOLD_RATIO,
+        "consumption_std_tons": round(consumption_std, 2),
+        "delivery_std_tons": round(delivery_std, 2),
+        "open_orders_tons": round(open_orders_total, 2),
     }
 
 
 def _record_history(db: Session, materials: List[Material]) -> None:
     """Persist an inventory snapshot for each material in *materials*."""
-    timestamp = datetime.utcnow()
+    timestamp = _utc_now()
     for material in materials:
         db.add(
             MaterialInventoryHistory(
@@ -146,9 +265,13 @@ def _record_history(db: Session, materials: List[Material]) -> None:
         )
 
 
-def _material_alerts(material: Material) -> List[MaterialAlert]:
+def _material_alerts(
+    material: Material,
+    db: Session,
+    orders_map: Optional[Dict[str, List[OrderRecord]]] = None,
+) -> List[MaterialAlert]:
     """Return alert records for *material*, including lead-time guidance when capacity is low."""
-    metrics = _material_metrics(material)
+    metrics = _material_metrics(material, db, orders_map)
     alerts: List[MaterialAlert] = []
     ratio = metrics["fill_ratio"]
 
@@ -193,17 +316,41 @@ def _demo_seconds_remaining() -> Optional[float]:
     duration = DEMO_STATE.get("duration")
     if not start or not duration:
         return None
-    elapsed = (datetime.utcnow() - start).total_seconds()
+    start_utc = _ensure_utc(start)
+    elapsed = (_utc_now() - start_utc).total_seconds()
     return max(0.0, duration - elapsed)
 
 
 def _generate_recommendations(db: Session, days: int = 7) -> List[MaterialRecommendation]:
     """Forecast depletion for each material using trailing history and return order advice."""
-    lookback = datetime.utcnow() - timedelta(days=days)
+    lookback = _utc_now() - timedelta(days=days)
     recommendations: List[MaterialRecommendation] = []
 
     materials = db.query(Material).all()
+    orders_map = _orders_by_material()
     for material in materials:
+        evaluation_time = _utc_now()
+        key = material.type.strip().lower()
+        material_orders = orders_map.get(key, [])
+        horizon_seconds = days * 86400
+        orders_within_window = [
+            order
+            for order in material_orders
+            if order.status not in _CLOSED_ORDER_STATUSES
+            and 0.0 <= (order.requested_date - evaluation_time).total_seconds() <= horizon_seconds
+        ]
+        orders_weight_tons = sum(order.required_tons for order in orders_within_window)
+        order_summaries = [
+            OrderSummary(
+                order_id=order.order_id,
+                material=order.material,
+                requested_date=order.requested_date,
+                required_tons=round(order.required_tons, 2),
+                status=order.status,
+            )
+            for order in sorted(orders_within_window, key=lambda item: item.requested_date)
+        ]
+
         history = (
             db.query(MaterialInventoryHistory)
             .filter(
@@ -236,6 +383,8 @@ def _generate_recommendations(db: Session, days: int = 7) -> List[MaterialRecomm
                     recommended_order_date=None,
                     recommended_order_tons=None,
                     rationale="Insufficient history to estimate consumption",
+                    pending_orders_tons=round(orders_weight_tons, 2),
+                    upcoming_orders=order_summaries,
                 )
             )
             continue
@@ -246,11 +395,14 @@ def _generate_recommendations(db: Session, days: int = 7) -> List[MaterialRecomm
             if delta > 0:
                 total_consumption += delta
 
-        span_seconds = (history[-1].recorded_at - history[0].recorded_at).total_seconds()
+        first_ts = _ensure_utc(history[0].recorded_at)
+        last_ts = _ensure_utc(history[-1].recorded_at)
+        span_seconds = (last_ts - first_ts).total_seconds()
         span_days = max(span_seconds / 86400, 1.0)
         avg_daily = total_consumption / span_days if total_consumption > 0 else 0.0
 
         projected_weight = material.weight - avg_daily * days
+        projected_weight -= orders_weight_tons
         reorder_threshold = BIN_CAPACITY_TONS * REORDER_THRESHOLD_RATIO
         lead_time = ORDER_LEAD_TIME_DAYS
         days_until_reorder: Optional[float] = None
@@ -282,20 +434,20 @@ def _generate_recommendations(db: Session, days: int = 7) -> List[MaterialRecomm
 
             if days_until_reorder is not None:
                 if days_until_reorder <= lead_time:
-                    recommended_date = datetime.utcnow()
+                    recommended_date = evaluation_time
                     rationale = (
                         f"Reorder threshold hit in {days_until_reorder:.1f} days. "
                         f"With a {lead_time}-day lead time, place an order immediately."
                     )
                 elif order_offset is not None and order_offset <= days:
-                    recommended_date = datetime.utcnow() + timedelta(days=order_offset)
+                    recommended_date = evaluation_time + timedelta(days=order_offset)
                     rationale = (
                         f"Reorder threshold expected in {days_until_reorder:.1f} days. "
                         f"Order in {order_offset:.1f} days ({recommended_date.date()}) to account for "
                         f"the {lead_time}-day lead time."
                     )
                 elif projected_weight <= reorder_threshold:
-                    recommended_date = datetime.utcnow() + timedelta(days=days)
+                    recommended_date = evaluation_time + timedelta(days=days)
                     rationale = (
                         "Inventory projected to fall below threshold beyond current outlook; "
                         "begin planning for a replenishment."
@@ -306,6 +458,11 @@ def _generate_recommendations(db: Session, days: int = 7) -> List[MaterialRecomm
                     rationale = (
                         "Inventory remains above reorder threshold for the selected horizon."
                     )
+
+        if orders_weight_tons > 0:
+            rationale = (
+                f"{rationale} Pending orders in next {days} days: {orders_weight_tons:.0f} tons."
+            )
 
         recommendations.append(
             MaterialRecommendation(
@@ -318,6 +475,8 @@ def _generate_recommendations(db: Session, days: int = 7) -> List[MaterialRecomm
                 recommended_order_date=recommended_date,
                 recommended_order_tons=round(recommended_tons, 2) if recommended_tons is not None else None,
                 rationale=rationale,
+                pending_orders_tons=round(orders_weight_tons, 2),
+                upcoming_orders=order_summaries,
             )
         )
 
@@ -331,7 +490,7 @@ def _inventory_history_series(
     if not materials:
         return [], []
 
-    end_date = datetime.utcnow().date()
+    end_date = _utc_now().date()
     start_date = end_date - timedelta(days=max(days - 1, 0))
     date_window = [
         start_date + timedelta(days=offset) for offset in range((end_date - start_date).days + 1)
@@ -359,7 +518,8 @@ def _inventory_history_series(
 
         daily_snapshot: dict = {}
         for record in records:
-            snapshot_date = record.recorded_at.date()
+            recorded_at = _ensure_utc(record.recorded_at)
+            snapshot_date = recorded_at.date()
             if date_window[0] <= snapshot_date <= date_window[-1]:
                 daily_snapshot[snapshot_date] = float(record.weight)
 
@@ -378,10 +538,12 @@ def _inventory_history_series(
 
 
 def _build_inventory_report(
+    db: Session,
     materials: List[Material],
     recommendations: List[MaterialRecommendation],
     history_labels: List[str],
     history_series: List[Tuple[str, List[Tuple[int, float]]]],
+    orders_map: Optional[Dict[str, List[OrderRecord]]] = None,
 ) -> BytesIO:
     """Render a PDF snapshot with inventory tables, fill chart, trends, and recommendation outlook."""
     buffer = BytesIO()
@@ -396,7 +558,7 @@ def _build_inventory_report(
     styles = getSampleStyleSheet()
     story = []
 
-    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    generated_at = _utc_now().strftime("%Y-%m-%d %H:%M UTC")
     story.append(Paragraph("Raw Materials Inventory Report", styles["Title"]))
     story.append(Paragraph(f"Generated on {generated_at}", styles["Normal"]))
     story.append(Spacer(1, 0.3 * inch))
@@ -411,7 +573,7 @@ def _build_inventory_report(
     material_names: List[str] = []
 
     for material in sorted(materials, key=lambda item: item.type.lower()):
-        metrics = _material_metrics(material)
+        metrics = _material_metrics(material, db, orders_map)
         fill_pct = round(metrics["fill_ratio"] * 100, 1)
         status_label, status_color = _material_status(metrics["fill_ratio"])
         table_data.append(
@@ -678,7 +840,7 @@ def _apply_recipe_batch(
                 material_type=material.type,
                 delta=delta,
                 remaining_weight=material.weight,
-                timestamp=datetime.utcnow(),
+                timestamp=_utc_now(),
             )
         )
 
@@ -721,7 +883,7 @@ def _generate_bol_payload(
     tare_lb = round(random.uniform(25000, 32000), 2)
     gross_lb = round(net_lb + tare_lb, 2)
 
-    delivery_number = f"SIM-{int(datetime.utcnow().timestamp())}-{random.randint(1000, 9999)}"
+    delivery_number = f"SIM-{int(_utc_now().timestamp())}-{random.randint(1000, 9999)}"
     carrier = random.choice(CARRIER_CHOICES)
 
     return BillOfLading(
@@ -733,7 +895,7 @@ def _generate_bol_payload(
         gross_weight_lb=gross_lb,
         tare_weight_lb=tare_lb,
         carrier=carrier,
-        delivery_date=datetime.utcnow(),
+        delivery_date=_utc_now(),
         material_code=material.type,
     )
 
@@ -796,8 +958,9 @@ def health_check():
 @app.get("/api/materials", response_model=List[MaterialRead])
 def get_materials(db: Session = Depends(get_db)) -> List[MaterialRead]:
     materials = db.query(Material).all()
+    orders_map = _orders_by_material()
     return [
-        MaterialRead.model_validate(_material_metrics(material))
+        MaterialRead.model_validate(_material_metrics(material, db, orders_map))
         for material in materials
     ]
 
@@ -827,7 +990,8 @@ def create_material(
     _record_history(db, [material])
     db.commit()
     db.refresh(material)
-    return MaterialRead.model_validate(_material_metrics(material))
+    orders_map = _orders_by_material()
+    return MaterialRead.model_validate(_material_metrics(material, db, orders_map))
 
 
 @app.put("/api/materials/{material_id}", response_model=MaterialRead)
@@ -865,7 +1029,8 @@ def update_material(
 
     db.commit()
     db.refresh(material)
-    return MaterialRead.model_validate(_material_metrics(material))
+    orders_map = _orders_by_material()
+    return MaterialRead.model_validate(_material_metrics(material, db, orders_map))
 
 
 @app.post("/api/materials/{material_id}/adjust", response_model=MaterialRead)
@@ -883,15 +1048,17 @@ def adjust_material(
     _record_history(db, [material])
     db.commit()
     db.refresh(material)
-    return MaterialRead.model_validate(_material_metrics(material))
+    orders_map = _orders_by_material()
+    return MaterialRead.model_validate(_material_metrics(material, db, orders_map))
 
 
 @app.get("/api/alerts", response_model=List[MaterialAlert])
 def get_alerts(db: Session = Depends(get_db)) -> List[MaterialAlert]:
     materials = db.query(Material).all()
     alerts: List[MaterialAlert] = []
+    orders_map = _orders_by_material()
     for material in materials:
-        alerts.extend(_material_alerts(material))
+        alerts.extend(_material_alerts(material, db, orders_map))
     return alerts
 
 
@@ -901,13 +1068,29 @@ def get_recommendations(days: int = 7, db: Session = Depends(get_db)) -> List[Ma
     return _generate_recommendations(db, days=days)
 
 
+@app.get("/api/orders", response_model=List[OrderSummary])
+def get_orders() -> List[OrderSummary]:
+    orders = load_orders()
+    return [
+        OrderSummary(
+            order_id=order.order_id,
+            material=order.material,
+            requested_date=order.requested_date,
+            required_tons=round(order.required_tons, 2),
+            status=order.status,
+        )
+        for order in sorted(orders, key=lambda item: item.requested_date)
+    ]
+
+
 @app.get("/api/report/inventory")
 def export_inventory_report(db: Session = Depends(get_db)) -> StreamingResponse:
     """Stream a PDF report summarizing inventory levels and ordering outlook."""
     materials = db.query(Material).order_by(Material.type.asc()).all()
     recommendations = _generate_recommendations(db, days=7)
     history_labels, history_series = _inventory_history_series(db, materials, days=7)
-    pdf_buffer = _build_inventory_report(materials, recommendations, history_labels, history_series)
+    orders_map = _orders_by_material()
+    pdf_buffer = _build_inventory_report(db, materials, recommendations, history_labels, history_series, orders_map)
     headers = {
         "Content-Disposition": "attachment; filename=inventory-report.pdf",
         "Cache-Control": "no-store",
@@ -998,7 +1181,7 @@ def _seed_demo_history(
     if not materials:
         return
 
-    base_time = datetime.utcnow() - timedelta(days=days)
+    base_time = _utc_now() - timedelta(days=days)
 
     for material in materials:
         if replace:
@@ -1037,7 +1220,7 @@ def _seed_demo_history(
             MaterialInventoryHistory(
                 material_id=material.id,
                 weight=round(current_weight, 2),
-                recorded_at=datetime.utcnow(),
+                    recorded_at=_utc_now(),
             )
         )
 
@@ -1054,12 +1237,11 @@ def _add_future_delivery(
         return
     if material is None:
         material = random.choice(materials)
-    horizon_hours = (4, 12) if status == "Upcoming" else (12, 36)
-    delivery_time = (datetime.utcnow() + timedelta(hours=random.randint(*horizon_hours))).strftime(
-        "%Y-%m-%d %H:%M"
-    )
+    normalized_status = normalize_delivery_status(status, default="upcoming")
+    horizon_hours = (4, 12) if normalized_status == "upcoming" else (12, 36)
+    delivery_time = _utc_now() + timedelta(hours=random.randint(*horizon_hours))
     if target_ratio is None:
-        target_ratio = 0.92 if status == "Upcoming" else 0.78
+        target_ratio = 0.92 if normalized_status == "upcoming" else 0.78
     target_ratio = max(0.55, min(target_ratio, 0.97))
     target_weight = BIN_CAPACITY_TONS * target_ratio
     deficit_tons = max(target_weight - material.weight, 0.0)
@@ -1072,10 +1254,10 @@ def _add_future_delivery(
     incoming_weight_lb = round(incoming_tons * 2000, 2)
     delivery = TruckDelivery(
         material_id=material.id,
-        delivery_num=f"DEMO-{uuid4().hex[:6].upper()}-{status[:3].upper()}",
+        delivery_num=f"DEMO-{uuid4().hex[:6].upper()}-{normalized_status[:3].upper()}",
         incoming_weight=incoming_weight_lb,
         delivery_time=delivery_time,
-        status=status,
+        status=normalized_status,
     )
     db.add(delivery)
 
@@ -1088,9 +1270,14 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
     except Exception:
         records = []
 
-    existing_numbers = {
-        delivery.delivery_num for delivery in db.query(TruckDelivery).all()
-    }
+    existing_deliveries = db.query(TruckDelivery).all()
+    existing_numbers = {delivery.delivery_num for delivery in existing_deliveries}
+
+    for delivery in existing_deliveries:
+        normalized = normalize_delivery_status(delivery.status)
+        if delivery.status != normalized:
+            delivery.status = normalized
+    db.flush()
     material_index = {
         material.type.strip().lower(): material for material in materials
     }
@@ -1103,18 +1290,18 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
         material = material_index.get(canonical)
         if not material:
             continue
-        status = entry.get("status", "Upcoming").lower()
-        if status not in {"Upcoming", "completed", "upcoming"}:
-            status = "Upcoming"
+        status = normalize_delivery_status(entry.get("status"), default="upcoming")
+        raw_delivery_time = entry.get(
+            "deliveryDateTime",
+            _utc_now().strftime("%Y-%m-%d %H:%M"),
+        )
+        delivery_time = parse_delivery_timestamp(raw_delivery_time)
         db.add(
             TruckDelivery(
                 material_id=material.id,
                 delivery_num=delivery_number,
                 incoming_weight=float(entry.get("incomingWeight", 0.0)),
-                delivery_time=entry.get(
-                    "deliveryDateTime",
-                    datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
-                ),
+                delivery_time=delivery_time,
                 status=status,
             )
         )
@@ -1124,71 +1311,47 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
 
     if not db.query(TruckDelivery).filter(TruckDelivery.status == "upcoming").first():
         _add_future_delivery(db, materials, status="upcoming")
-    if not db.query(TruckDelivery).filter(TruckDelivery.status == "Upcoming").first():
-        _add_future_delivery(db, materials, status="Upcoming")
 
     reorder_threshold = BIN_CAPACITY_TONS * REORDER_THRESHOLD_RATIO
     for material in materials:
+        existing_upcoming_count = (
+            db.query(TruckDelivery)
+            .filter(
+                TruckDelivery.material_id == material.id,
+                TruckDelivery.status == "upcoming",
+            )
+            .count()
+        )
+
         if material.weight <= reorder_threshold:
-            existing_pending = (
-                db.query(TruckDelivery)
-                .filter(
-                    TruckDelivery.material_id == material.id,
-                    TruckDelivery.status == "Upcoming",
-                )
-                .first()
-            )
-            if not existing_pending:
-                _add_future_delivery(
-                    db,
-                    materials,
-                    status="Upcoming",
-                    material=material,
-                    target_ratio=0.92,
-                )
-            existing_upcoming = (
-                db.query(TruckDelivery)
-                .filter(
-                    TruckDelivery.material_id == material.id,
-                    TruckDelivery.status == "upcoming",
-                )
-                .first()
-            )
-            if not existing_upcoming:
+            required = 2
+            deficit = max(0, required - existing_upcoming_count)
+            for _ in range(deficit):
                 _add_future_delivery(
                     db,
                     materials,
                     status="upcoming",
                     material=material,
-                    target_ratio=0.8,
+                    target_ratio=0.9,
                 )
-        elif material.weight <= reorder_threshold * 1.1:
-            existing_upcoming = (
-                db.query(TruckDelivery)
-                .filter(
-                    TruckDelivery.material_id == material.id,
-                    TruckDelivery.status == "upcoming",
-                )
-                .first()
+        elif material.weight <= reorder_threshold * 1.1 and existing_upcoming_count == 0:
+            _add_future_delivery(
+                db,
+                materials,
+                status="upcoming",
+                material=material,
+                target_ratio=0.85,
             )
-            if not existing_upcoming:
-                _add_future_delivery(
-                    db,
-                    materials,
-                    status="upcoming",
-                    material=material,
-                    target_ratio=0.85,
-                )
 
     focus_materials = {
-        "sms clay": {
-            "Upcoming": {"count": 3, "target_ratio": 0.96},
-            "upcoming": {"count": 2, "target_ratio": 0.9},
-        },
-        "feldspar": {
-            "Upcoming": {"count": 3, "target_ratio": 0.95},
-            "upcoming": {"count": 2, "target_ratio": 0.88},
-        },
+        "sms clay": [
+            {"count": 3, "target_ratio": 0.96},
+            {"count": 5, "target_ratio": 0.9},
+        ],
+        "feldspar": [
+            {"count": 3, "target_ratio": 0.95},
+            {"count": 5, "target_ratio": 0.88},
+        ],
     }
     for name, targets in focus_materials.items():
         material = next(
@@ -1197,16 +1360,16 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
         )
         if not material:
             continue
-        for status, config in targets.items():
-            target_count = config.get("count", 0)
-            ratio_hint = config.get(
-                "target_ratio", 0.9 if status == "Upcoming" else 0.8
-            )
+        for config in targets:
+            target_count = max(0, int(config.get("count", 0)))
+            if target_count <= 0:
+                continue
+            ratio_hint = float(config.get("target_ratio", 0.9))
             existing = (
                 db.query(TruckDelivery)
                 .filter(
                     TruckDelivery.material_id == material.id,
-                    TruckDelivery.status == status,
+                    TruckDelivery.status == "upcoming",
                 )
                 .count()
             )
@@ -1214,7 +1377,7 @@ def _ensure_demo_deliveries(db: Session, materials: List[Material]) -> None:
                 _add_future_delivery(
                     db,
                     materials,
-                    status=status,
+                    status="upcoming",
                     material=material,
                     target_ratio=ratio_hint,
                 )
@@ -1339,7 +1502,11 @@ def seed_demo_inventory(
     db.commit()
 
     all_materials = db.query(Material).order_by(Material.type.asc()).all()
-    return [MaterialRead.model_validate(_material_metrics(material)) for material in all_materials]
+    orders_map = _orders_by_material()
+    return [
+        MaterialRead.model_validate(_material_metrics(material, db, orders_map))
+        for material in all_materials
+    ]
 
 
 @app.post(
@@ -1355,7 +1522,7 @@ async def start_demo(duration_seconds: int = 30) -> DemoStatus:
 
     _prepare_demo_delivery_queue()
 
-    start_time = datetime.utcnow()
+    start_time = _utc_now()
     DEMO_STATE.update({"start_time": start_time, "duration": duration_seconds})
     DEMO_STATE["task"] = asyncio.create_task(_demo_runner(duration_seconds))
 
@@ -1408,10 +1575,12 @@ def create_delivery(
         material_code=payload.material_code,
     )
     delivery = _process_bill_of_lading(db, bol)
-    if payload.status and delivery.status != payload.status:
-        delivery.status = payload.status
-        db.commit()
-        db.refresh(delivery)
+    if payload.status:
+        desired_status = normalize_delivery_status(payload.status, default="completed")
+        if delivery.status != desired_status:
+            delivery.status = desired_status
+            db.commit()
+            db.refresh(delivery)
     return delivery
 
 
@@ -1440,14 +1609,14 @@ def _process_bill_of_lading(db: Session, payload: BillOfLading) -> TruckDelivery
     if delivery:
         delivery.incoming_weight = payload.net_weight_lb
         delivery.material_id = material.id
-        delivery.delivery_time = payload.delivery_date.isoformat()
-        delivery.status = delivery.status or "completed"
+        delivery.delivery_time = payload.delivery_date
+        delivery.status = "completed"
     else:
         delivery = TruckDelivery(
             delivery_num=payload.delivery_number,
             incoming_weight=payload.net_weight_lb,
             material_id=material.id,
-            delivery_time=payload.delivery_date.isoformat(),
+            delivery_time=payload.delivery_date,
             status="completed",
         )
         db.add(delivery)
@@ -1477,11 +1646,16 @@ def import_bill_of_lading(
 MATERIAL_DENSITIES = {
     "super strength 2": 9.2,
     "tn stone": 10.2,
+    "sms": 11.8,
     "sms clay": 11.8,
+    "3m ns 700": 11.2,
     "feldspar": 9.8,
+    "f1 feldspar": 9.8,
+    "green scrap": 7.4,
     "sandspar": 8.8,
     "minspar": 12.4,
     "lr28": 11.2,
+    "fired scrap": 12.2,
 }
 
 @app.post("/api/weight")
@@ -1500,10 +1674,12 @@ async def estimate_image_weight(file: UploadFile = File(...), material: str = Fo
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     try:
         overlay, mass_tons = calc_weight(image, density_lbs_per_gal)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ImageModelDependencyError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     _, buffer = cv2.imencode(".png", overlay)
     overlay_bytes = BytesIO(buffer.tobytes())
     return StreamingResponse(

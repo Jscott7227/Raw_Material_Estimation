@@ -2,4 +2,4 @@ FROM nginx:alpine
 COPY index.html /usr/share/nginx/html/index.html
 COPY styles.css /usr/share/nginx/html/styles.css
 COPY app.js /usr/share/nginx/html/app.js
-COPY images/Portobello_Logo_White.png /usr/share/nginx/html/images/Portobello_Logo_White.png
+COPY images /usr/share/nginx/html/images

@@ -1,36 +1,37 @@
-# FastAPI Dev Container Starter
+# Backend Service (FastAPI)
 
-This repository ships with a ready-to-go VS Code Dev Container for running and developing the included FastAPI app without touching your local Python toolchain.
+This folder contains the FastAPI application that powers the Portobello Raw Materials proof-of-concept. Most developers will interact with the project from the repository root (`../README.md`), but the notes below capture service‑specific details.
 
-## What You Need
+## Local development
 
-- Docker Desktop (or any Docker engine) up and running.
-- VS Code with the **Dev Containers** extension (ms-vscode-remote.remote-containers).
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
 
-## Quick Start
+Environment variables:
 
-1. **Clone** the repository locally.
-2. **Open** the folder in VS Code. When prompted, select *Reopen in Container*. You can also trigger it manually with `> Dev Containers: Reopen in Container`.
-3. Wait for the build to finish. First start pulls the `python:3.11-slim` image, installs the dependencies from `requirements.txt`, and sets up oh-my-bash inside the container.
-4. Once the container is ready, the FastAPI app is available. Launch it with:
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `DATABASE_URL` | SQLAlchemy connection string | `sqlite:///./materials.db` |
+| `SAM_CHECKPOINT_PATH` | Segment Anything checkpoint for vision-based weight estimation | `./sam_vit_b_01ec64.pth` |
+| `TORCH_HOME` | Torch hub cache directory (useful when running offline) | Torch default |
 
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-   ```
+## Data seeding & utilities
 
-   VS Code will forward the exposed port so you can browse `http://localhost:8000`.
+- `data/shipments.json` – starter deliveries for demo mode. Modify or replace to suit your scenario.
+- `data/orders.csv` – upcoming orders consumed by `/api/orders` and factored into reorder recommendations.
+- `load_shipments.py` – CLI helper to bulk import shipment JSON:  
+  `python load_shipments.py --file data/shipments.json`
 
-## Live Development Tips
+## Testing
 
-- **Dependencies**: Update `requirements.txt` and run `pip install -r requirements.txt` inside the container. The devcontainer automatically reinstalls requirements on creation.
-- **Terminal profile**: oh-my-bash is installed by default, giving you a richer bash prompt inside the container.
-- **Hot reload**: `uvicorn` runs with `--reload`, so saving files triggers a restart automatically.
+```bash
+pytest ../backend/tests
+```
 
-## Troubleshooting
+Tests run against an ephemeral SQLite database and include coverage for materials, deliveries, orders, and demo helpers.
 
-- **Container fails to start**: Make sure Docker has at least 4 GB of memory and that there are no conflicting containers using port 8000.
-
-## Next Steps
-
-- Add any project-specific docs here (API routes, workflows, etc.).
-- Update `.devcontainer/devcontainer.json` if you need additional tools or different lifecycle commands.
+Refer back to the root documentation for the complete project overview, API reference, and demo playbook.

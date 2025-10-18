@@ -9,3 +9,5 @@ env/
 venv/
 *.log
 node_modules/
+*.db
+backend/*.pth

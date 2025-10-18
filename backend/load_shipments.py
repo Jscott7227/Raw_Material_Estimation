@@ -13,14 +13,20 @@ import argparse
 import json
 import math
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Sequence
 
 from sqlalchemy import func
 
-from database import SessionLocal, init_db
-from models import Material, TruckDelivery, MaterialInventoryHistory
+try:
+    from .database import SessionLocal, init_db  # type: ignore
+    from .models import Material, TruckDelivery, MaterialInventoryHistory  # type: ignore
+    from .utils import normalize_delivery_status, parse_delivery_timestamp  # type: ignore
+except ImportError:  # pragma: no cover
+    from database import SessionLocal, init_db  # type: ignore
+    from models import Material, TruckDelivery, MaterialInventoryHistory  # type: ignore
+    from utils import normalize_delivery_status, parse_delivery_timestamp  # type: ignore
 
 DATA_DIR = Path(__file__).parent / "data"
 DEFAULT_JSON = DATA_DIR / "shipments.json"
@@ -29,6 +35,10 @@ DEFAULT_JSON = DATA_DIR / "shipments.json"
 MATERIAL_ALIASES: Dict[str, str] = {
     "minspar 1fg": "Minspar",
     "3 m lr28": "LR28",
+    "3m ns 700": "3M NS 700",
+    "sms": "SMS",
+    "sms clay": "SMS",
+    "f1 feldspar": "F1 Feldspar",
 }
 
 
@@ -58,11 +68,9 @@ def get_or_create_material(session, name: str) -> Material:
     return material
 
 
-def parse_delivery_datetime(raw: str) -> str:
-    """Validate and return shipment datetime strings for persistence."""
-    # The DB schema stores this as a string, so we'll just validate it.
-    datetime.strptime(raw, "%Y-%m-%d %H:%M")
-    return raw
+def parse_delivery_datetime(raw: str) -> datetime:
+    """Validate and return shipment datetime values for persistence."""
+    return parse_delivery_timestamp(raw)
 
 
 def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
@@ -76,7 +84,7 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
         if reset:
             session.query(TruckDelivery).delete()
             session.query(Material).update({"weight": 0.0})
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
             for material in session.query(Material).all():
                 session.add(
                     MaterialInventoryHistory(
@@ -95,7 +103,7 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
             delivery_number = entry["deliveryNumber"]
             material_name = entry["material"]
             incoming_weight = float(entry.get("expectedWeight", entry.get("incomingWeight", 0)))
-            status = entry.get("status", "Upcoming")
+            status = normalize_delivery_status(entry.get("status"), default="upcoming")
             delivery_time = parse_delivery_datetime(entry["deliveryDateTime"])
             material_weight = float(entry.get("actualWeight", entry.get("materialWeight", 0.0)))
 
@@ -124,7 +132,7 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
                 session.add(shipment)
                 imported += 1
 
-            if status.lower() == "completed":
+            if status == "completed":
                 # Accumulate material-specific totals so we can overwrite inventory
                 # with the values present in the import file.
                 material_totals[material.id] += material_weight
@@ -132,7 +140,7 @@ def load_shipments(records: Iterable[dict], *, reset: bool = False) -> None:
         session.commit()
 
         if material_totals:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
             # Only update weights for materials represented in the shipment data.
             for material_id, total_weight in material_totals.items():
                 material = session.get(Material, material_id)
