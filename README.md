@@ -170,5 +170,5 @@ Feel free to adapt the quote above for your post.
 
 ## Maintainers
 
-- Dalton Sloan – [LinkedIn](https://www.linkedin.com/in/<your-profile>/)
+- Dalton Sloan – [LinkedIn]([https://www.linkedin.com/in/<your-profile>/](https://www.linkedin.com/in/dalton-w-sloan/))
 - Collaborators welcome! Open an issue or submit a pull request to extend the analytics, add new data connectors, or polish the frontend.
