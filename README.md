@@ -39,8 +39,8 @@ A production‑style proof of concept that demonstrates how Portobello America c
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/<your-org>/portobello-raw-materials.git
-cd portobello-raw-materials
+git clone https://github.com/<your-org>/Hackathon.git
+cd Hackathon
 ```
 
 ### 2. Launch with Docker Compose (preferred)
