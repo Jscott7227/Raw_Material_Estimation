@@ -14,43 +14,7 @@ let materialsData = [];
 let activeAlerts = [];
 let isPollingShipments = false;
 let recommendationsData = [];
-let ordersData = [];
 let uploadedFile = null;
-
-const API_BASE_URL =
-    window.API_BASE_URL ||
-    `${window.location.protocol}//${window.location.hostname}:${window.location.port === '8080' || !window.location.port ? '8000' : window.location.port}`;
-
-function formatDisplayDateTime(isoString) {
-    if (!isoString) {
-        return '—';
-    }
-    const date = new Date(isoString);
-    if (Number.isNaN(date.getTime())) {
-        return isoString;
-    }
-    return date.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function extractDateKey(isoString) {
-    if (!isoString) {
-        return '';
-    }
-    const date = new Date(isoString);
-    if (Number.isNaN(date.getTime())) {
-        return '';
-    }
-    return date.toISOString().slice(0, 10);
-}
-
-function formatDate(value) {
-    if (!value) return "—";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-        return value;
-    }
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
 
 function formatTons(value) {
     const normalized = Number(value) || 0;
@@ -100,13 +64,12 @@ async function loadShipments() {
     isPollingShipments = true;
 
     try {
-        const [deliveriesResponse, materialsResponse, alertsResponse, recommendationsResponse, ordersResponse] = await Promise.all([
+        const [deliveriesResponse, materialsResponse, alertsResponse, recommendationsResponse] = await Promise.all([
             // In production, these calls are fed by live MES/TMS integrations.
-            fetch(`${API_BASE_URL}/api/deliveries`),
-            fetch(`${API_BASE_URL}/api/materials`),
-            fetch(`${API_BASE_URL}/api/alerts`),
-            fetch(`${API_BASE_URL}/api/recommendations?days=7`),
-            fetch(`${API_BASE_URL}/api/orders`)
+            fetch('http://localhost:8000/api/deliveries'),
+            fetch('http://localhost:8000/api/materials'),
+            fetch('http://localhost:8000/api/alerts'),
+            fetch('http://localhost:8000/api/recommendations?days=7')
         ]);
 
         if (!deliveriesResponse.ok) {
@@ -117,45 +80,31 @@ async function loadShipments() {
         materialsData = materialsResponse.ok ? await materialsResponse.json() : [];
         activeAlerts = alertsResponse.ok ? await alertsResponse.json() : [];
         recommendationsData = recommendationsResponse.ok ? await recommendationsResponse.json() : [];
-        ordersData = ordersResponse.ok ? await ordersResponse.json() : [];
 
         renderMaterials();
         renderAlerts();
         renderRecommendations();
-        renderOrders();
 
         populateMaterialDropdown();
 
         const materialMap = new Map(materialsData.map(material => [material.id, material.type]));
 
         shipmentsData = deliveries.map((delivery, index) => {
-            const status = (delivery.status || 'upcoming').toLowerCase();
-            const incomingWeight = Number(delivery.incoming_weight ?? delivery.expected_weight ?? 0);
-
-            let deliveryIso = '';
-            if (delivery.delivery_time) {
-                const parsed = new Date(delivery.delivery_time);
-                deliveryIso = Number.isNaN(parsed.getTime()) ? String(delivery.delivery_time) : parsed.toISOString();
-            }
-
+            const deliveryDateTime = (delivery.delivery_time || '').replace('T', ' ');
             return {
                 id: index,
                 deliveryNumber: delivery.delivery_num,
                 material: materialMap.get(delivery.material_id) || `Material ${delivery.material_id}`,
-                expectedWeight: incomingWeight,
-                actualWeight: status === 'completed'
-                    ? incomingWeight
-                    : Number(delivery.actual_weight ?? delivery.material_weight ?? 0) || 0,
-                deliveryDateTime: deliveryIso,
-                displayDateTime: formatDisplayDateTime(deliveryIso),
-                dateKey: extractDateKey(deliveryIso),
-                status
+                expectedWeight: Number(delivery.expected_weight || delivery.incoming_weight) || 0,
+                actualWeight: Number(delivery.actual_weight || delivery.material_weight) || 0,
+                deliveryDateTime,
+                status: delivery.status || 'pending'
             };
         });
 
         if (shipmentsData.length > 0) {
             const shipmentDates = shipmentsData
-                .map(shipment => shipment.dateKey)
+                .map(shipment => shipment.deliveryDateTime.split(' ')[0])
                 .filter(Boolean)
                 .sort();
 
@@ -181,8 +130,6 @@ async function loadShipments() {
         renderAlerts();
         recommendationsData = [];
         renderRecommendations();
-        ordersData = [];
-        renderOrders();
     } finally {
         isPollingShipments = false;
     }
@@ -194,42 +141,28 @@ function renderShipments() {
     const endDate = document.getElementById('endDate').value;
     tbody.innerHTML = '';
     
-    // Filter shipments by date range and sort by status (completed first, then recency)
+    // Filter shipments by date range and sort by status (completed first)
     const filteredShipments = shipmentsData
         .filter(shipment => {
-            if (!shipment.dateKey) {
-                return true;
-            }
-            return shipment.dateKey >= startDate && shipment.dateKey <= endDate;
+            const shipmentDate = shipment.deliveryDateTime.split(' ')[0];
+            return shipmentDate >= startDate && shipmentDate <= endDate;
         })
         .sort((a, b) => {
-            if (a.status !== b.status) {
-                return a.status === 'completed' ? -1 : 1;
-            }
-            const aTime = a.deliveryDateTime || '';
-            const bTime = b.deliveryDateTime || '';
-            return aTime > bTime ? -1 : aTime < bTime ? 1 : 0;
+            if (a.status === 'completed' && b.status === 'upcoming') return -1;
+            if (a.status === 'upcoming' && b.status === 'completed') return 1;
+            return 0;
         });
     
     filteredShipments.forEach(shipment => {
         const row = document.createElement('tr');
-        row.className = `status-${shipment.status}`;
-        const expectedDisplay = Number.isFinite(shipment.expectedWeight)
-            ? Number(shipment.expectedWeight).toLocaleString()
-            : '—';
-        const actualDisplay = Number.isFinite(shipment.actualWeight) && shipment.actualWeight > 0
-            ? Number(shipment.actualWeight).toLocaleString()
-            : (shipment.status === 'completed' ? expectedDisplay : '—');
-        const expectedCell = expectedDisplay === '—' ? '—' : `${expectedDisplay} lbs`;
-        const actualCell = actualDisplay === '—' ? '—' : `${actualDisplay} lbs`;
-        const statusLabel = shipment.status.charAt(0).toUpperCase() + shipment.status.slice(1);
+        row.className = shipment.status;
         row.innerHTML = `
             <td>${shipment.deliveryNumber}</td>
             <td>${shipment.material}</td>
-            <td>${expectedCell}</td>
-            <td>${actualCell}</td>
-            <td>${shipment.displayDateTime}</td>
-            <td><span class="status-${shipment.status} status-clickable" data-shipment-id="${shipment.id}">${statusLabel}</span></td>
+            <td>${shipment.expectedWeight.toLocaleString()} lbs</td>
+            <td>${shipment.actualWeight.toLocaleString()} lbs</td>
+            <td>${shipment.deliveryDateTime}</td>
+            <td><span class="status-${shipment.status} status-clickable" data-shipment-id="${shipment.id}">${shipment.status.charAt(0).toUpperCase() + shipment.status.slice(1)}</span></td>
         `;
         tbody.appendChild(row);
     });
@@ -318,8 +251,6 @@ function renderMaterials() {
             </div>
             <div class="card-number">${formatTons(weight)}</div>
             <div class="card-subtitle">Fill: ${fillPercentage}% (${Number(material.bins_filled ?? 0).toFixed(2)} bins)</div>
-            <div class="card-metrics">σ usage: ${Number(material.consumption_std_tons ?? 0).toFixed(1)} t · σ receipts: ${Number(material.delivery_std_tons ?? 0).toFixed(1)} t</div>
-            <div class="card-metrics">Open orders: ${Number(material.open_orders_tons ?? 0).toLocaleString()} t</div>
             <div class="card-indicator ${tone}">${label}</div>
         `;
         cardsContainer.appendChild(card);
@@ -388,46 +319,9 @@ function renderRecommendations() {
             right.innerHTML = `<div class="recommendation-meta">${rec.rationale}</div>`;
         }
 
-        if (rec.pending_orders_tons && rec.pending_orders_tons > 0) {
-            const badge = document.createElement('div');
-            badge.className = 'badge badge-warning';
-            badge.textContent = `Pending ${rec.pending_orders_tons.toLocaleString()} t`;
-            right.appendChild(badge);
-        }
-
         item.appendChild(left);
         item.appendChild(right);
         list.appendChild(item);
-    });
-}
-
-function renderOrders() {
-    const list = document.getElementById('ordersList');
-    if (!list) {
-        return;
-    }
-
-    list.innerHTML = '';
-
-    if (!Array.isArray(ordersData) || ordersData.length === 0) {
-        list.innerHTML = '<div class="orders-empty">No orders scheduled.</div>';
-        return;
-    }
-
-    const sorted = [...ordersData].sort((a, b) => new Date(a.requested_date) - new Date(b.requested_date));
-    sorted.forEach((order) => {
-        const row = document.createElement('div');
-        row.className = 'orders-row';
-        row.innerHTML = `
-            <div class="orders-col">
-                <div class="orders-title">${order.material}</div>
-                <div class="orders-meta">${order.order_id}</div>
-            </div>
-            <div class="orders-col">${Number(order.required_tons ?? 0).toLocaleString()} t</div>
-            <div class="orders-col">${formatDate(order.requested_date)}</div>
-            <div class="orders-col"><span class="badge badge-${order.status}">${order.status}</span></div>
-        `;
-        list.appendChild(row);
     });
 }
 
@@ -498,14 +392,16 @@ function updateJsonFile() {
 }
 
 function filterStatus(status) {
-    const rows = document.querySelectorAll('#truckTableBody tr');
-    rows.forEach((row) => {
+    const table = document.getElementById('truckTable');
+    const rows = table.getElementsByTagName('tr');
+    
+    for (let i = 1; i < rows.length; i++) {
         if (status === 'all') {
-            row.style.display = '';
+            rows[i].style.display = '';
         } else {
-            row.style.display = row.classList.contains(`status-${status}`) ? '' : 'none';
+            rows[i].style.display = rows[i].classList.contains(status) ? '' : 'none';
         }
-    });
+    }
 }
 
 
@@ -561,6 +457,7 @@ function handleImageUpload(event) {
 function checkSubmitButton() {
     const analyzeButton = document.getElementById('btnAnalyzeImage');
     const materialSelect = document.getElementById('materialSelect');
+    const densityInput = document.getElementById('densityInput');
 
     if (!analyzeButton) {
         return;
@@ -584,6 +481,7 @@ async function analyzeImage() {
     const resultNumber = document.getElementById('resultNumber');
     const resultDetails = document.getElementById('resultDetails');
     const materialSelect = document.getElementById('materialSelect');
+    const densityInput = document.getElementById('densityInput');
 
 
 
@@ -657,6 +555,7 @@ function resetImageUpload() {
     const analysisSection = document.getElementById('analysisSection');
     const newImageSection = document.getElementById('newImageSection');
     const materialSelect = document.getElementById('materialSelect');
+    const densityInput = document.getElementById('densityInput');
     const imageUpload = document.getElementById('imageUpload');
     const uploadArea = document.getElementById('uploadArea');
 

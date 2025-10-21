@@ -1,16 +1,11 @@
 # app/db/database.py
-from datetime import datetime, timezone
-import os
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from datetime import datetime
 
-try:
-    from .models import Base, Material, MaterialInventoryHistory  # type: ignore
-except ImportError:  # pragma: no cover
-    from models import Base, Material, MaterialInventoryHistory  # type: ignore
+from models import Base, Material, TruckDelivery, MaterialInventoryHistory
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./materials.db")
+DATABASE_URL = "sqlite:///./materials.db"
 
 engine = create_engine(
     DATABASE_URL,
@@ -22,7 +17,20 @@ def init_db():
     """Create tables if they do not exist"""
     Base.metadata.create_all(bind=engine)
     init_materials()  # Preload materials
+    init_test_delivery()
     seed_inventory_history()
+    
+def init_test_delivery():
+    """Add a temporary test truck delivery if none exists"""
+    db = SessionLocal()
+    
+    # Check if any deliveries already exist
+    if db.query(TruckDelivery).count() > 0:
+        db.close()
+        return
+
+    db.commit()
+    db.close()
 
 
 def seed_inventory_history():
@@ -31,7 +39,7 @@ def seed_inventory_history():
     try:
         if db.query(MaterialInventoryHistory).count() > 0:
             return
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.utcnow()
         for material in db.query(Material).all():
             db.add(
                 MaterialInventoryHistory(

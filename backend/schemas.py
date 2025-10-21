@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator, field_validator
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class MaterialBase(BaseModel):
-    type: str = Field(...)
+    type: str = Field(..., example="Super Strength 2")
     humidity: float = Field(0.0, ge=0.0)
     density: float = Field(0.0, ge=0.0)
     weight: float = Field(0.0, ge=0.0)
@@ -34,19 +30,16 @@ class MaterialRead(MaterialBase):
     fill_ratio: float = Field(..., ge=0)
     bins_filled: float = Field(..., ge=0)
     needs_reorder: bool
-    consumption_std_tons: float = Field(0.0, ge=0)
-    delivery_std_tons: float = Field(0.0, ge=0)
-    open_orders_tons: float = Field(0.0, ge=0)
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class TruckDeliveryBase(BaseModel):
-    delivery_num: str = Field(...)
+    delivery_num: str = Field(..., example="TRK-001")
     incoming_weight: float = Field(..., ge=0.0)
     material_id: int = Field(..., ge=1)
-    delivery_time: datetime = Field(...)
-    status: str = Field("upcoming", pattern="^(completed|upcoming)$")
+    delivery_time: str = Field(..., example="2025-10-16T15:20:00")
+    status: str = Field("Upcoming", pattern="^(Upcoming|completed|upcoming)$")
 
 
 class TruckDeliveryRead(TruckDeliveryBase):
@@ -60,7 +53,7 @@ class SensorEvent(BaseModel):
     material_type: str = Field(...)
     delta: float = Field(..., le=0)
     remaining_weight: float = Field(..., ge=0)
-    timestamp: datetime = Field(default_factory=_utc_now)
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
 class MaterialAlert(BaseModel):
@@ -90,8 +83,6 @@ class MaterialRecommendation(BaseModel):
     recommended_order_date: Optional[datetime]
     recommended_order_tons: Optional[float]
     rationale: str
-    pending_orders_tons: float = Field(0.0, ge=0)
-    upcoming_orders: List["OrderSummary"] = Field(default_factory=list)
 
 
 class DemoInventoryItem(BaseModel):
@@ -153,27 +144,7 @@ class DeliveryCreateRequest(BaseModel):
     material_code: str
     incoming_weight_lb: float = Field(..., ge=0)
     delivery_time: datetime
-    status: Optional[str] = Field(default="completed", pattern="^(completed|upcoming)$")
-
-    @field_validator("status", mode="before")
-    @classmethod
-    def _normalize_status(cls, value: Optional[str]) -> str:
-        from .utils import normalize_delivery_status
-
-        if value is None:
-            return "completed"
-        return normalize_delivery_status(value, default="completed")
-
-
-class OrderSummary(BaseModel):
-    order_id: str
-    material: str
-    requested_date: datetime
-    required_tons: float
-    status: str
-
-
-MaterialRecommendation.model_rebuild()
+    status: Optional[str] = Field(default="completed", pattern="^(Upcoming|completed|upcoming)$")
 
 
 class BillOfLadingSimulationConfig(BaseModel):
